@@ -2,22 +2,21 @@ import { useState, useEffect } from "react"
 import { BenchmarkHeader } from "@/components/BenchmarkHeader"
 import { TimelineControls, type StageVisibility } from "@/components/TimelineControls"
 import { Timeline } from "@/components/Timeline"
+import { BenchmarkStatistics } from "@/components/BenchmarkStatistics"
+import { BenchmarkDataManager } from "@/components/BenchmarkDataManager"
 import { PIXELS_PER_MS } from "@/lib/constants"
-import sampleDataBase from "@/data/sample-benchmark.json"
 import type { BenchmarkResult } from "./lib/types"
-import { BenchmarkStatistics } from "./components/BenchmarkStatistics"
 
 function App() {
-  const [zoom, setZoom] = useState(0.5) // Start with lower zoom
+  const [benchmarkData, setBenchmarkData] = useState<BenchmarkResult | null>(null)
+  const [zoom, setZoom] = useState(0.5)
   const [viewportOffset, setViewportOffset] = useState(0)
   const [visibleStages, setVisibleStages] = useState<StageVisibility>({
     download: true,
     replay: true,
     confirmation: true,
-    finalization: false // Hidden by default
+    finalization: false
   })
-  
-  const sampleData = sampleDataBase as BenchmarkResult
   
   const handleZoomIn = () => {
     setZoom(prev => Math.min(prev * 1.5, 10))
@@ -33,9 +32,11 @@ function App() {
   }
   
   const handleFitAll = () => {
+    if (!benchmarkData) return
+    
     // Calculate zoom to fit all visible stages
     const firstTimestamp = Math.min(
-      ...sampleData.slots.flatMap(slot => {
+      ...benchmarkData.slots.flatMap(slot => {
         const ep1First = slot.endpoint1.transitions.find(t => t.status === "FirstShredReceived")?.timestamp || Infinity
         const ep2First = slot.endpoint2.transitions.find(t => t.status === "FirstShredReceived")?.timestamp || Infinity
         return Math.min(ep1First, ep2First)
@@ -44,7 +45,7 @@ function App() {
     
     // Calculate last timestamp based on actual transition times
     const lastTimestamp = Math.max(
-      ...sampleData.slots.flatMap(slot => {
+      ...benchmarkData.slots.flatMap(slot => {
         const transitions1 = slot.endpoint1.transitions
         const transitions2 = slot.endpoint2.transitions
         
@@ -99,9 +100,16 @@ function App() {
     setViewportOffset(0)
   }
   
-  // Auto-fit on initial load and window resize
+  // Auto-fit when data changes or visible stages change
   useEffect(() => {
-    handleFitAll()
+    if (benchmarkData) {
+      handleFitAll()
+    }
+  }, [benchmarkData, visibleStages]) // eslint-disable-line react-hooks/exhaustive-deps
+  
+  // Handle window resize
+  useEffect(() => {
+    if (!benchmarkData) return
     
     const handleResize = () => {
       handleFitAll()
@@ -109,34 +117,103 @@ function App() {
     
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
-  }, [visibleStages]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [benchmarkData, visibleStages]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reset zoom when data changes
+  useEffect(() => {
+    setZoom(0.5)
+    setViewportOffset(0)
+  }, [benchmarkData])
+
+  // Load initial data from localStorage if available
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("yellowstone-benchmarks")
+      if (stored) {
+        const benchmarks = JSON.parse(stored)
+        if (benchmarks.length > 0) {
+          // Load the most recent benchmark
+          const mostRecent = benchmarks.sort((a: any, b: any) => b.timestamp - a.timestamp)[0]
+          setBenchmarkData(mostRecent.data)
+        }
+      }
+    } catch (error) {
+      console.error("Failed to load stored benchmarks:", error)
+    }
+  }, [])
   
   return (
     <div className="min-h-screen bg-background overflow-x-hidden min-w-screen">
       <div className="w-full max-w-[95vw] sm:max-w-[90vw] lg:max-w-[85vw] xl:max-w-[80vw] mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
-        <div className="w-full space-y-4 sm:space-y-6">
-        <BenchmarkHeader data={sampleData} />
-        <BenchmarkStatistics data={sampleData} />
-        
-        <TimelineControls
-          zoom={zoom}
-          onZoomIn={handleZoomIn}
-          onZoomOut={handleZoomOut}
-          onReset={handleReset}
-          onFitAll={handleFitAll}
-          onZoomChange={setZoom}
-          visibleStages={visibleStages}
-          onVisibleStagesChange={setVisibleStages}
-        />
-        
-        <Timeline 
-          data={sampleData}
-          zoom={zoom}
-          viewportOffset={viewportOffset}
-          onViewportChange={setViewportOffset}
-          visibleStages={visibleStages}
-        />
-        </div>
+        {!benchmarkData ? (
+          // Show data manager when no data is loaded
+          <div className="flex flex-col items-center justify-center min-h-[80vh] space-y-8">
+            <div className="text-center space-y-3">
+              <h1 className="text-4xl font-bold bg-gradient-to-r from-[#DA05E2] to-[#2C0FDF] bg-clip-text text-transparent">
+                Yellowstone Thorofare
+              </h1>
+              <p className="text-lg text-muted-foreground">
+                Visualize and analyze gRPC endpoint performance
+              </p>
+            </div>
+            
+            <BenchmarkDataManager
+              onDataChange={setBenchmarkData}
+              currentData={benchmarkData}
+            />
+            
+            <div className="text-center text-sm text-muted-foreground max-w-lg">
+              <p>
+                Run <code className="bg-muted px-2 py-1 rounded">grpc-bench</code> to generate benchmark data, 
+                then upload the JSON file to visualize the results.
+              </p>
+            </div>
+          </div>
+        ) : (
+          // Show benchmark visualization when data is loaded
+          <div className="w-full space-y-4 sm:space-y-6">
+            <div className="flex justify-between items-start gap-4">
+              <BenchmarkHeader data={benchmarkData} />
+              
+              {/* Data manager in sidebar mode */}
+              <div className="hidden xl:block">
+                <BenchmarkDataManager
+                  onDataChange={setBenchmarkData}
+                  currentData={benchmarkData}
+                />
+              </div>
+            </div>
+            
+            {/* Mobile/tablet data manager */}
+            <div className="xl:hidden">
+              <BenchmarkDataManager
+                onDataChange={setBenchmarkData}
+                currentData={benchmarkData}
+              />
+            </div>
+            
+            <BenchmarkStatistics data={benchmarkData} />
+            
+            <TimelineControls
+              zoom={zoom}
+              onZoomIn={handleZoomIn}
+              onZoomOut={handleZoomOut}
+              onReset={handleReset}
+              onFitAll={handleFitAll}
+              onZoomChange={setZoom}
+              visibleStages={visibleStages}
+              onVisibleStagesChange={setVisibleStages}
+            />
+            
+            <Timeline 
+              data={benchmarkData}
+              zoom={zoom}
+              viewportOffset={viewportOffset}
+              onViewportChange={setViewportOffset}
+              visibleStages={visibleStages}
+            />
+          </div>
+        )}
       </div>
     </div>
   )
