@@ -23,7 +23,7 @@ interface TooltipState {
 }
 
 interface ProcessedStage {
-  type: 'waiting' | 'download' | 'replay' | 'confirmation' | 'finalization'
+  type: 'first_shred_delay' | 'download' | 'replay' | 'confirmation' | 'finalization'
   startTime: number
   endTime: number
   duration: number
@@ -76,7 +76,7 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
     // Add delay block if this endpoint was slower (first shred delay)
     if (endpoint.first_shred_delay_ms !== null && endpoint.first_shred_delay_ms !== undefined && endpoint.first_shred_delay_ms > 0) {
       stages.push({
-        type: 'waiting',
+        type: 'first_shred_delay',
         startTime: otherFirstShred,
         endTime: firstShred,
         duration: endpoint.first_shred_delay_ms,
@@ -135,24 +135,44 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
       })
     }
 
-    // Detect overlapping stages within the slot
+    // Detect parallel stages and assign parallel indices
     for (let i = 0; i < stages.length; i++) {
       stages[i].parallelIndex = 0
       stages[i].parallel = false
       
-      if (stages[i].type === 'waiting') continue
+      if (stages[i].type === 'first_shred_delay') continue
       
       for (let j = 0; j < i; j++) {
-        if (stages[j].type === 'waiting') continue
+        if (stages[j].type === 'first_shred_delay') continue
         
         // Check if stages overlap
         if (stages[i].startTime < stages[j].endTime && stages[i].endTime > stages[j].startTime) {
           stages[i].parallel = true
           stages[j].parallel = true
+          // Find the lowest available parallel index
           if (stages[j].parallelIndex >= stages[i].parallelIndex) {
             stages[i].parallelIndex = stages[j].parallelIndex + 1
           }
         }
+      }
+    }
+    
+    // Group sequential processing stages together visually
+    // If any of replay/confirmation/finalization needs to be parallel, they all should be
+    const processingStages = stages.filter(s => 
+      s.type === 'replay' || s.type === 'confirmation' || s.type === 'finalization'
+    )
+    
+    if (processingStages.length > 0) {
+      // Find the highest parallelIndex among processing stages
+      const maxProcessingIndex = Math.max(...processingStages.map(s => s.parallelIndex))
+      
+      // If any processing stage is parallel, move them all to the same level
+      if (maxProcessingIndex > 0) {
+        processingStages.forEach(s => {
+          s.parallelIndex = maxProcessingIndex
+          s.parallel = true
+        })
       }
     }
 
@@ -164,14 +184,19 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
     const endpointData = slot[endpoint]
     const transitions = endpointData.transitions
     
+    // Get actual transition timestamps
     const firstShred = transitions.find(t => t.status === "FirstShredReceived")?.timestamp || 0
-    let lastTime = firstShred
+    const finalized = transitions.find(t => t.status === "Finalized")?.timestamp || 0
+    const confirmed = transitions.find(t => t.status === "Confirmed")?.timestamp || 0
+    const processed = transitions.find(t => t.status === "Processed")?.timestamp || 0
+    const completed = transitions.find(t => t.status === "Completed")?.timestamp || 0
     
-    // Calculate end time based on visible stages
-    if (visibleStages.download) lastTime += endpointData.durations.download_ms
-    if (visibleStages.replay) lastTime += endpointData.durations.replay_ms
-    if (visibleStages.confirmation) lastTime += endpointData.durations.confirmation_ms
-    if (visibleStages.finalization) lastTime += endpointData.durations.finalization_ms
+    // Find the last timestamp based on visible stages
+    let lastTime = firstShred
+    if (visibleStages.download && completed > lastTime) lastTime = completed
+    if (visibleStages.replay && processed > lastTime) lastTime = processed
+    if (visibleStages.confirmation && confirmed > lastTime) lastTime = confirmed
+    if (visibleStages.finalization && finalized > lastTime) lastTime = finalized
     
     return { start: firstShred, end: lastTime }
   }
@@ -237,7 +262,7 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
 
   const totalDuration = lastTimestamp - firstTimestamp
   const pixelsPerMs = PIXELS_PER_MS * zoom
-  const timelineWidth = totalDuration * pixelsPerMs + 400 // Extra padding
+  const timelineWidth = Math.min(totalDuration * pixelsPerMs + 200, 500) // Cap at 50k pixels to prevent lag
 
   // Assign lanes for both endpoints
   const ep1Slots = assignSlotLanes(data.slots, 'endpoint1')
@@ -361,7 +386,7 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
           key={`${stage.type}-${idx}`}
           className={cn(
             "absolute flex items-center justify-center rounded text-xs text-white font-semibold transition-all cursor-pointer hover:z-20 hover:brightness-110",
-            stage.type === 'waiting' ? "bg-gray-500 opacity-70 border-2 border-dashed border-gray-300" : STAGE_COLORS[stage.type as keyof typeof STAGE_COLORS]
+            stage.type === 'first_shred_delay' ? "bg-gray-500 opacity-70 border-2 border-dashed border-gray-300" : STAGE_COLORS[stage.type as keyof typeof STAGE_COLORS]
           )}
           style={{
             left: `${relativeStart}px`,
@@ -369,7 +394,7 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
             transform: 'translateY(-50%)',
             width: `${width}px`,
             height: `${STAGE_HEIGHT}px`,
-            backgroundImage: stage.type === 'waiting' ? 
+            backgroundImage: stage.type === 'first_shred_delay' ? 
               'repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(255,255,255,0.1) 5px, rgba(255,255,255,0.1) 10px)' : 
               undefined
           }}
@@ -384,10 +409,10 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
           )}
           {width > 30 && width <= 60 && (
             <span className="truncate px-1 text-[10px]">
-              {stage.type === 'waiting' ? '⏱' : stage.type.substring(0, 1).toUpperCase()} {Math.round(stage.duration)}
+              {stage.type === 'first_shred_delay' ? '⏱' : stage.type.substring(0, 1).toUpperCase()} {Math.round(stage.duration)}
             </span>
           )}
-          {width <= 30 && stage.type === 'waiting' && (
+          {width <= 30 && stage.type === 'first_shred_delay' && (
             <span className="text-[10px]">⏱</span>
           )}
         </div>
@@ -428,8 +453,13 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
               </span>
             </div>
             
-            {/* Render all slots for EP1 */}
-            {ep1Slots.map(({ slot, lane }) => (
+            {/* Render visible slots for EP1 */}
+            {ep1Slots
+              .filter(({ slot }) => {
+                const slotX = ((slot.endpoint1.transitions[0]?.timestamp || firstTimestamp) - firstTimestamp) * pixelsPerMs
+                return slotX > -(viewportOffset || 0) - 500 && slotX < (viewportOffset || 0) + window.innerWidth + 500
+              })
+              .map(({ slot, lane }) => (
               <div 
                 key={`ep1-${slot.slot}`}
                 className="absolute"
@@ -477,8 +507,13 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
               </span>
             </div>
             
-            {/* Render all slots for EP2 */}
-            {ep2Slots.map(({ slot, lane }) => (
+            {/* Render visible slots for EP2 */}
+            {ep2Slots
+              .filter(({ slot }) => {
+                const slotX = ((slot.endpoint2.transitions[0]?.timestamp || firstTimestamp) - firstTimestamp) * pixelsPerMs
+                return slotX > -(viewportOffset || 0) - 500 && slotX < (viewportOffset || 0) + window.innerWidth + 500
+              })
+              .map(({ slot, lane }) => (
               <div 
                 key={`ep2-${slot.slot}`}
                 className="absolute"
