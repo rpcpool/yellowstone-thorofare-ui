@@ -44,10 +44,80 @@ const SLOT_HEIGHT = 60 // Height of each slot lane
 const TIMELINE_PADDING = 40 // Padding for timeline labels
 const HEADER_HEIGHT = 40
 
+// Time axis component
+interface TimeAxisProps {
+  duration: number
+  zoom: number
+  viewportOffset?: number
+  windowWidth: number
+}
+
+const TimeAxis: React.FC<TimeAxisProps> = ({ 
+  duration, 
+  zoom,
+  viewportOffset = 0,
+  windowWidth
+}) => {
+  const pixelsPerMs = PIXELS_PER_MS * zoom
+  const tickInterval = getTickInterval(duration / zoom)
+  const ticks = []
+  
+  const getContainerPercentage = () => {
+    if (windowWidth < 640) return 0.95
+    if (windowWidth < 1024) return 0.90
+    if (windowWidth < 1280) return 0.85
+    return 0.80
+  }
+  
+  const containerWidth = windowWidth * getContainerPercentage() - 32
+  
+  for (let time = 0; time <= duration; time += tickInterval) {
+    const x = time * pixelsPerMs - viewportOffset
+    
+    if (x >= -50 && x <= containerWidth + 50) {
+      ticks.push(
+        <div
+          key={time}
+          className="absolute top-0 bottom-0 border-l border-border/50"
+          style={{ left: `${x}px` }}
+        >
+          <span className="absolute top-2 left-1 text-xs text-muted-foreground whitespace-nowrap">
+            +{formatTime(time)}
+          </span>
+        </div>
+      )
+    }
+  }
+
+  return (
+    <div className="relative h-full overflow-hidden w-full">
+      {ticks}
+    </div>
+  )
+}
+
+function getTickInterval(visibleDuration: number): number {
+  if (visibleDuration > 5000) return 1000
+  if (visibleDuration > 2000) return 500
+  if (visibleDuration > 1000) return 200
+  if (visibleDuration > 500) return 100
+  if (visibleDuration > 200) return 50
+  if (visibleDuration > 100) return 20
+  return 10
+}
+
+function formatTime(ms: number): string {
+  if (ms >= 1000) {
+    return `${(ms / 1000).toFixed(1)}s`
+  }
+  return `${ms}ms`
+}
+
 export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, visibleStages }: TimelineProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [dragStart, setDragStart] = useState({ x: 0, scrollLeft: 0 })
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth)
   const [tooltip, setTooltip] = useState<TooltipState>({
     visible: false,
     x: 0,
@@ -56,6 +126,16 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
     endpoint: null,
     endpointName: ''
   })
+
+  // Handle window resize
+  useEffect(() => {
+    const handleResize = () => {
+      setWindowWidth(window.innerWidth)
+    }
+    
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   // Process stages for a given endpoint
   const processStages = (endpoint: SlotDetail, otherEndpoint: SlotDetail): ProcessedStage[] => {
@@ -262,7 +342,26 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
 
   const totalDuration = lastTimestamp - firstTimestamp
   const pixelsPerMs = PIXELS_PER_MS * zoom
-  const timelineWidth = Math.min(totalDuration * pixelsPerMs + 200, 500) // Cap at 50k pixels to prevent lag
+  
+  // Calculate timeline width - responsive container width
+  const getContainerPercentage = () => {
+    if (windowWidth < 640) return 0.95  // 95vw on mobile
+    if (windowWidth < 1024) return 0.90 // 90vw on tablet
+    if (windowWidth < 1280) return 0.85 // 85vw on desktop
+    return 0.80 // 80vw on large screens
+  }
+  
+  const containerWidth = windowWidth * getContainerPercentage() - 32 // responsive vw minus padding
+  const minWidth = containerWidth - 40 // Account for borders
+  const calculatedWidth = totalDuration * pixelsPerMs + 200
+  
+  // Use calculated width but ensure it fills the container minimum
+  const timelineWidth = Math.max(minWidth, calculatedWidth)
+  
+  // If timeline is too wide at current zoom, suggest a better zoom
+  if (calculatedWidth > containerWidth && zoom > 0.1) {
+    console.info(`Timeline width (${calculatedWidth.toFixed(0)}px) exceeds container. Use "Fit All" button or zoom out.`)
+  }
 
   // Assign lanes for both endpoints
   const ep1Slots = assignSlotLanes(data.slots, 'endpoint1')
@@ -421,30 +520,56 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
   }
 
   return (
-    <div className="bg-card rounded-lg border overflow-hidden">
+    <div className="bg-card rounded-lg border overflow-hidden w-full max-w-full">
       {/* Fixed header with time axis */}
-      <div className="sticky top-0 z-30 bg-card border-b" style={{ height: HEADER_HEIGHT }}>
+      <div className="sticky top-0 z-30 bg-card border-b overflow-hidden" style={{ height: HEADER_HEIGHT }}>
         <TimeAxis 
           duration={totalDuration}
           zoom={zoom}
           viewportOffset={viewportOffset || 0}
+          windowWidth={windowWidth}
         />
       </div>
 
       {/* Scrollable timeline content */}
+      <style>{`
+        .timeline-scroll::-webkit-scrollbar {
+          height: 12px;
+          width: 12px;
+        }
+        .timeline-scroll::-webkit-scrollbar-track {
+          background: hsl(var(--muted));
+        }
+        .timeline-scroll::-webkit-scrollbar-thumb {
+          background: hsl(var(--border));
+          border-radius: 6px;
+        }
+        .timeline-scroll::-webkit-scrollbar-thumb:hover {
+          background: hsl(var(--foreground) / 0.3);
+        }
+      `}</style>
       <div 
         ref={scrollRef}
         className={cn(
-          "relative overflow-auto", // Changed to allow both scrolls
+          "timeline-scroll relative overflow-x-auto overflow-y-auto",
           isDragging ? "cursor-grabbing" : "cursor-grab"
         )}
-        style={{ height: '600px' }} // Fixed viewport height
+        style={{ 
+          height: '600px',
+          maxWidth: '100%',
+          overflowX: 'auto'
+        }}
         onScroll={handleScroll}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
       >
-        <div style={{ width: timelineWidth, height: totalHeight, position: 'relative' }}>
+        <div style={{ 
+          width: timelineWidth, 
+          height: totalHeight, 
+          position: 'relative',
+          minWidth: '100%'
+        }}>
           {/* EP1 Timeline */}
           <div className="absolute top-0 left-0 right-0" style={{ height: ep1Height }}>
             <div className="absolute left-4 top-4 z-10">
@@ -457,7 +582,7 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
             {ep1Slots
               .filter(({ slot }) => {
                 const slotX = ((slot.endpoint1.transitions[0]?.timestamp || firstTimestamp) - firstTimestamp) * pixelsPerMs
-                return slotX > -(viewportOffset || 0) - 500 && slotX < (viewportOffset || 0) + window.innerWidth + 500
+                return slotX > -(viewportOffset || 0) - 200 && slotX < (viewportOffset || 0) + containerWidth + 200
               })
               .map(({ slot, lane }) => (
               <div 
@@ -511,7 +636,7 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
             {ep2Slots
               .filter(({ slot }) => {
                 const slotX = ((slot.endpoint2.transitions[0]?.timestamp || firstTimestamp) - firstTimestamp) * pixelsPerMs
-                return slotX > -(viewportOffset || 0) - 500 && slotX < (viewportOffset || 0) + window.innerWidth + 500
+                return slotX > -(viewportOffset || 0) - 200 && slotX < (viewportOffset || 0) + containerWidth + 200
               })
               .map(({ slot, lane }) => (
               <div 
@@ -562,60 +687,4 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
       )}
     </div>
   )
-}
-
-// Time axis component
-function TimeAxis({ 
-  duration, 
-  zoom,
-  viewportOffset = 0
-}: { 
-  duration: number
-  zoom: number
-  viewportOffset?: number
-}) {
-  const pixelsPerMs = PIXELS_PER_MS * zoom
-  const tickInterval = getTickInterval(duration / zoom)
-  const ticks = []
-
-  for (let time = 0; time <= duration; time += tickInterval) {
-    const x = time * pixelsPerMs - viewportOffset
-    
-    if (x >= -50 && x <= window.innerWidth) {
-      ticks.push(
-        <div
-          key={time}
-          className="absolute top-0 bottom-0 border-l border-border/50"
-          style={{ left: `${x}px` }}
-        >
-          <span className="absolute top-2 left-1 text-xs text-muted-foreground whitespace-nowrap">
-            +{formatTime(time)}
-          </span>
-        </div>
-      )
-    }
-  }
-
-  return (
-    <div className="relative h-full overflow-hidden">
-      {ticks}
-    </div>
-  )
-}
-
-function getTickInterval(visibleDuration: number): number {
-  if (visibleDuration > 5000) return 1000
-  if (visibleDuration > 2000) return 500
-  if (visibleDuration > 1000) return 200
-  if (visibleDuration > 500) return 100
-  if (visibleDuration > 200) return 50
-  if (visibleDuration > 100) return 20
-  return 10
-}
-
-function formatTime(ms: number): string {
-  if (ms >= 1000) {
-    return `${(ms / 1000).toFixed(1)}s`
-  }
-  return `${ms}ms`
 }
