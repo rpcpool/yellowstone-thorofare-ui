@@ -1,7 +1,6 @@
 import { useRef, useEffect, useState, useCallback } from "react"
-import { useVirtualizer } from "@tanstack/react-virtual"
-import type { BenchmarkResult, SlotComparison, SlotDetail } from "@/lib/types"
-import { STAGE_COLORS, STAGE_LABELS, ENDPOINT_COLORS, PIXELS_PER_MS, ROW_HEIGHT, STAGE_HEIGHT, STAGE_SPACING } from "@/lib/constants"
+import type { BenchmarkResult, SlotDetail, SlotComparison } from "@/lib/types"
+import { STAGE_COLORS, STAGE_LABELS, ENDPOINT_COLORS, PIXELS_PER_MS, STAGE_HEIGHT, STAGE_SPACING } from "@/lib/constants"
 import { cn } from "@/lib/utils"
 import { SlotTooltip } from "./SlotTooltip"
 import type { StageVisibility } from "./TimelineControls"
@@ -23,18 +22,6 @@ interface TooltipState {
   endpointName: string
 }
 
-interface VirtualItem {
-  type: 'header' | 'slot'
-  data: number | SlotComparison
-  index: number
-}
-
-interface TimeDifference {
-  stage: string
-  difference: number
-  ep1Ahead: boolean
-}
-
 interface ProcessedStage {
   type: 'waiting' | 'download' | 'replay' | 'confirmation' | 'finalization'
   startTime: number
@@ -45,9 +32,22 @@ interface ProcessedStage {
   parallelIndex: number
 }
 
+interface SlotWithLane {
+  slot: SlotComparison
+  lane: number
+  startTime: number
+  endTime: number
+}
+
+// Constants for horizontal layout
+const SLOT_HEIGHT = 60 // Height of each slot lane
+const TIMELINE_PADDING = 40 // Padding for timeline labels
+const HEADER_HEIGHT = 40
+
 export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, visibleStages }: TimelineProps) {
-  const horizontalScrollRef = useRef<HTMLDivElement>(null)
-  const [hoveredSlot, setHoveredSlot] = useState<number | null>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const [dragStart, setDragStart] = useState({ x: 0, scrollLeft: 0 })
   const [tooltip, setTooltip] = useState<TooltipState>({
     visible: false,
     x: 0,
@@ -56,9 +56,8 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
     endpoint: null,
     endpointName: ''
   })
-  const [timeDifferences, setTimeDifferences] = useState<TimeDifference[] | null>(null)
 
-  // Process transitions to get actual stage timings
+  // Process stages for a given endpoint
   const processStages = (endpoint: SlotDetail, otherEndpoint: SlotDetail): ProcessedStage[] => {
     const stages: ProcessedStage[] = []
     const transitions = endpoint.transitions
@@ -74,22 +73,20 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
     // Get the other endpoint's first timestamp
     const otherFirstShred = otherEndpoint.transitions.find(t => t.status === "FirstShredReceived")?.timestamp || 0
 
-    // Add waiting time block if this endpoint was slower (first shred delay)
+    // Add delay block if this endpoint was slower (first shred delay)
     if (endpoint.first_shred_delay_ms !== null && endpoint.first_shred_delay_ms !== undefined && endpoint.first_shred_delay_ms > 0) {
-      // This endpoint had to wait for the other one
-      // The waiting block shows from when the faster endpoint started to when this one started
       stages.push({
         type: 'waiting',
-        startTime: otherFirstShred,  // When the faster endpoint started
-        endTime: firstShred,         // When this endpoint started
+        startTime: otherFirstShred,
+        endTime: firstShred,
         duration: endpoint.first_shred_delay_ms,
-        label: `Wait ${endpoint.first_shred_delay_ms.toFixed(1)}ms`,
+        label: `${STAGE_LABELS.first_shred_delay} ${endpoint.first_shred_delay_ms.toFixed(1)}ms`,
         parallel: false,
         parallelIndex: 0
       })
     }
 
-    // Download stage (FirstShredReceived -> Completed)
+    // Add stages based on visibility
     if (visibleStages.download && firstShred && completed) {
       stages.push({
         type: 'download',
@@ -102,7 +99,6 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
       })
     }
 
-    // Replay stage (CreatedBank -> Processed)
     if (visibleStages.replay && createdBank && processed) {
       stages.push({
         type: 'replay',
@@ -115,7 +111,6 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
       })
     }
 
-    // Confirmation stage (Processed -> Confirmed)
     if (visibleStages.confirmation && processed && confirmed) {
       stages.push({
         type: 'confirmation',
@@ -128,7 +123,6 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
       })
     }
 
-    // Finalization stage (Confirmed -> Finalized)
     if (visibleStages.finalization && confirmed && finalized) {
       stages.push({
         type: 'finalization',
@@ -141,7 +135,7 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
       })
     }
 
-    // Detect parallel stages and assign parallel indices
+    // Detect overlapping stages within the slot
     for (let i = 0; i < stages.length; i++) {
       stages[i].parallelIndex = 0
       stages[i].parallel = false
@@ -155,37 +149,76 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
         if (stages[i].startTime < stages[j].endTime && stages[i].endTime > stages[j].startTime) {
           stages[i].parallel = true
           stages[j].parallel = true
-          // Find the lowest available parallel index
           if (stages[j].parallelIndex >= stages[i].parallelIndex) {
             stages[i].parallelIndex = stages[j].parallelIndex + 1
           }
         }
       }
     }
-    
-    // Group sequential processing stages together visually
-    // If any of replay/confirmation/finalization needs to be parallel, they all should be
-    const processingStages = stages.filter(s => 
-      s.type === 'replay' || s.type === 'confirmation' || s.type === 'finalization'
-    )
-    
-    if (processingStages.length > 0) {
-      // Find the highest parallelIndex among processing stages
-      const maxProcessingIndex = Math.max(...processingStages.map(s => s.parallelIndex))
-      
-      // If any processing stage is parallel, move them all to the same level
-      if (maxProcessingIndex > 0) {
-        processingStages.forEach(s => {
-          s.parallelIndex = maxProcessingIndex
-          s.parallel = true
-        })
-      }
-    }
 
     return stages
-  } 
+  }
 
-  // Calculate timeline bounds - include waiting time in calculation
+  // Calculate slot end times for lane assignment
+  const getSlotTimeRange = (slot: SlotComparison, endpoint: 'endpoint1' | 'endpoint2'): { start: number, end: number } => {
+    const endpointData = slot[endpoint]
+    const transitions = endpointData.transitions
+    
+    const firstShred = transitions.find(t => t.status === "FirstShredReceived")?.timestamp || 0
+    let lastTime = firstShred
+    
+    // Calculate end time based on visible stages
+    if (visibleStages.download) lastTime += endpointData.durations.download_ms
+    if (visibleStages.replay) lastTime += endpointData.durations.replay_ms
+    if (visibleStages.confirmation) lastTime += endpointData.durations.confirmation_ms
+    if (visibleStages.finalization) lastTime += endpointData.durations.finalization_ms
+    
+    return { start: firstShred, end: lastTime }
+  }
+
+  // Assign slots to lanes to avoid overlaps
+  const assignSlotLanes = (slots: SlotComparison[], endpoint: 'endpoint1' | 'endpoint2'): SlotWithLane[] => {
+    const slotsWithLanes: SlotWithLane[] = []
+    const lanes: { endTime: number }[] = []
+    
+    // Sort slots by start time
+    const sortedSlots = [...slots].sort((a, b) => {
+      const aStart = getSlotTimeRange(a, endpoint).start
+      const bStart = getSlotTimeRange(b, endpoint).start
+      return aStart - bStart
+    })
+    
+    sortedSlots.forEach(slot => {
+      const { start, end } = getSlotTimeRange(slot, endpoint)
+      
+      // Find the first available lane
+      let assignedLane = -1
+      for (let i = 0; i < lanes.length; i++) {
+        if (lanes[i].endTime <= start) {
+          assignedLane = i
+          lanes[i].endTime = end
+          break
+        }
+      }
+      
+      // If no lane available, create a new one
+      if (assignedLane === -1) {
+        assignedLane = lanes.length
+        lanes.push({ endTime: end })
+      }
+      
+      slotsWithLanes.push({
+        slot,
+        lane: assignedLane,
+        startTime: start,
+        endTime: end
+      })
+    })
+    
+    return slotsWithLanes
+  }
+
+  // Calculate timeline bounds
   const firstTimestamp = Math.min(
     ...data.slots.flatMap(slot => {
       const ep1First = slot.endpoint1.transitions.find(t => t.status === "FirstShredReceived")?.timestamp || Infinity
@@ -195,81 +228,88 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
   )
   
   const lastTimestamp = Math.max(
-    ...data.slots.flatMap(slot => [
-      slot.endpoint1.transitions[slot.endpoint1.transitions.length - 1]?.timestamp || 0,
-      slot.endpoint2.transitions[slot.endpoint2.transitions.length - 1]?.timestamp || 0
-    ])
+    ...data.slots.flatMap(slot => {
+      const range1 = getSlotTimeRange(slot, 'endpoint1')
+      const range2 = getSlotTimeRange(slot, 'endpoint2')
+      return Math.max(range1.end, range2.end)
+    })
   )
 
   const totalDuration = lastTimestamp - firstTimestamp
   const pixelsPerMs = PIXELS_PER_MS * zoom
-  const timelineWidth = totalDuration * pixelsPerMs + 200
+  const timelineWidth = totalDuration * pixelsPerMs + 400 // Extra padding
 
-  // Calculate row heights based on parallel stages
-  const calculateRowHeight = (slot: SlotComparison): number => {
-    const ep1Stages = processStages(slot.endpoint1, slot.endpoint2)
-    const ep2Stages = processStages(slot.endpoint2, slot.endpoint1)
+  // Assign lanes for both endpoints
+  const ep1Slots = assignSlotLanes(data.slots, 'endpoint1')
+  const ep2Slots = assignSlotLanes(data.slots, 'endpoint2')
+  
+  const maxEp1Lanes = Math.max(...ep1Slots.map(s => s.lane)) + 1
+  const maxEp2Lanes = Math.max(...ep2Slots.map(s => s.lane)) + 1
+  
+  const ep1Height = maxEp1Lanes * SLOT_HEIGHT + TIMELINE_PADDING
+  const ep2Height = maxEp2Lanes * SLOT_HEIGHT + TIMELINE_PADDING
+  const totalHeight = ep1Height + ep2Height + 80
+
+  // Handle drag scrolling
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    setIsDragging(true)
+    setDragStart({
+      x: e.clientX,
+      scrollLeft: scrollRef.current?.scrollLeft || 0
+    })
+    e.preventDefault()
+  }, [])
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!isDragging || !scrollRef.current) return
     
-    const maxParallelEp1 = Math.max(...ep1Stages.map(s => s.parallelIndex), 0) + 1
-    const maxParallelEp2 = Math.max(...ep2Stages.map(s => s.parallelIndex), 0) + 1
-    const maxParallel = Math.max(maxParallelEp1, maxParallelEp2)
-    
-    // Base height + additional height for parallel stages
-    return ROW_HEIGHT + (maxParallel > 1 ? (maxParallel - 1) * (STAGE_HEIGHT + STAGE_SPACING) : 0)
-  }
+    const dx = e.clientX - dragStart.x
+    scrollRef.current.scrollLeft = dragStart.scrollLeft - dx
+  }, [isDragging, dragStart])
 
-  const groupHeaderHeight = 30
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false)
+  }, [])
 
-  // Virtual items include both slots and group headers
-  const virtualItems: VirtualItem[] = []
-  data.slots.forEach((slot, index) => {
-    if (index % 10 === 0) {
-      virtualItems.push({ type: 'header', data: index, index: virtualItems.length })
-    }
-    virtualItems.push({ type: 'slot', data: slot, index: virtualItems.length })
-  })
-
-  // Setup virtualizer
-  const parentRef = useRef<HTMLDivElement>(null)
-  const rowVirtualizer = useVirtualizer({
-    count: virtualItems.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: (index) => {
-      const item = virtualItems[index]
-      if (item.type === 'header') return groupHeaderHeight
+  // Global mouse events for drag
+  useEffect(() => {
+    if (isDragging) {
+      const handleGlobalMouseMove = (e: MouseEvent) => {
+        if (!scrollRef.current) return
+        const dx = e.clientX - dragStart.x
+        scrollRef.current.scrollLeft = dragStart.scrollLeft - dx
+      }
       
-      const slot = item.data as SlotComparison
-      const rowHeight = calculateRowHeight(slot)
-      // Each slot has 2 rows (EP1 and EP2)
-      return rowHeight * 2
-    },
-    overscan: 5,
-  })
+      const handleGlobalMouseUp = () => {
+        setIsDragging(false)
+      }
+      
+      document.addEventListener('mousemove', handleGlobalMouseMove)
+      document.addEventListener('mouseup', handleGlobalMouseUp)
+      
+      return () => {
+        document.removeEventListener('mousemove', handleGlobalMouseMove)
+        document.removeEventListener('mouseup', handleGlobalMouseUp)
+      }
+    }
+  }, [isDragging, dragStart])
 
   // Update scroll position when viewport offset changes
   useEffect(() => {
-    if (horizontalScrollRef.current) {
-      horizontalScrollRef.current.scrollLeft = viewportOffset
+    if (scrollRef.current && viewportOffset !== undefined) {
+      scrollRef.current.scrollLeft = viewportOffset
     }
   }, [viewportOffset])
 
-  // Handle horizontal scroll
-  const handleHorizontalScroll = useCallback((e: Event) => {
-    if (onViewportChange && e.target) {
-      const target = e.target as HTMLElement
-      onViewportChange(target.scrollLeft)
+  // Handle scroll events
+  const handleScroll = useCallback(() => {
+    if (onViewportChange && scrollRef.current) {
+      onViewportChange(scrollRef.current.scrollLeft)
     }
   }, [onViewportChange])
 
-  useEffect(() => {
-    const scrollContainer = horizontalScrollRef.current
-    if (scrollContainer) {
-      scrollContainer.addEventListener('scroll', handleHorizontalScroll, { passive: true })
-      return () => scrollContainer.removeEventListener('scroll', handleHorizontalScroll)
-    }
-  }, [handleHorizontalScroll])
-
-  const handleMouseEnter = (e: React.MouseEvent, slot: number, endpoint: SlotDetail, endpointName: string) => {
+  // Tooltip handlers
+  const handleStageMouseEnter = (e: React.MouseEvent, slot: number, endpoint: SlotDetail, endpointName: string) => {
     setTooltip({
       visible: true,
       x: e.clientX,
@@ -280,7 +320,7 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
     })
   }
 
-  const handleMouseMove = (e: React.MouseEvent) => {
+  const handleStageMouseMove = (e: React.MouseEvent) => {
     if (tooltip.visible) {
       setTooltip(prev => ({
         ...prev,
@@ -290,253 +330,185 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
     }
   }
 
-  const handleMouseLeave = () => {
+  const handleStageMouseLeave = () => {
     setTooltip(prev => ({
       ...prev,
       visible: false
     }))
   }
 
-  const calculateTimeDifferences = (slot: SlotComparison): TimeDifference[] => {
-    const differences: TimeDifference[] = []
-    const stages = ['download', 'replay', 'confirmation', 'finalization'] as const
-    
-    let ep1Time = slot.endpoint1.transitions.find(t => t.status === "FirstShredReceived")?.timestamp || 0
-    let ep2Time = slot.endpoint2.transitions.find(t => t.status === "FirstShredReceived")?.timestamp || 0
-    
-    stages.forEach(stage => {
-      if (visibleStages[stage]) {
-        ep1Time += slot.endpoint1.durations[`${stage}_ms`]
-        ep2Time += slot.endpoint2.durations[`${stage}_ms`]
-        
-        const diff = Math.abs(ep1Time - ep2Time)
-        differences.push({
-          stage,
-          difference: diff,
-          ep1Ahead: ep1Time < ep2Time
-        })
-      }
-    })
-    
-    return differences
-  }
-
-  const renderVirtualSlot = (slot: SlotComparison, virtualIndex: number) => {
-    const isHovered = hoveredSlot === slot.slot
-    const rowHeight = calculateRowHeight(slot)
-
-    return (
-      <div 
-        key={`slot-${slot.slot}`}
-        className="relative"
-        onMouseEnter={() => {
-          setHoveredSlot(slot.slot)
-          setTimeDifferences(calculateTimeDifferences(slot))
-          setTimeout(() => {
-            const element = document.querySelector(`[data-index="${virtualIndex}"]`) as HTMLElement
-            if (element) {
-              rowVirtualizer.measureElement(element)
-            }
-          }, 0)
-        }}
-        onMouseLeave={() => {
-          setHoveredSlot(null)
-          setTimeDifferences(null)
-          setTimeout(() => {
-            const element = document.querySelector(`[data-index="${virtualIndex}"]`) as HTMLElement
-            if (element) {
-              rowVirtualizer.measureElement(element)
-            }
-          }, 0)
-        }}
-      >
-        {/* Show time differences on hover */}
-        {isHovered && timeDifferences && (
-          <div className="absolute right-4 top-1/2 -translate-y-1/2 z-20 flex gap-2">
-            {timeDifferences.map((diff, idx) => (
-              <div
-                key={idx}
-                className="bg-background/90 backdrop-blur-sm border rounded px-2 py-1 text-xs"
-              >
-                <span className="text-muted-foreground">{diff.stage}:</span>
-                <span className={cn(
-                  "ml-1 font-mono",
-                  diff.ep1Ahead ? "text-[#DA05E2]" : "text-[#2C0FDF]"
-                )}>
-                  {diff.ep1Ahead ? "EP1" : "EP2"} +{diff.difference.toFixed(1)}ms
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* EP1 Row */}
-        <div 
-          className="relative border-b border-border/50 transition-all"
-          style={{ height: rowHeight }}
-        >
-          {/* Label */}
-          <div className={cn(
-            "absolute left-2 text-sm font-mono z-10",
-            ENDPOINT_COLORS.ep1
-          )}>
-            {slot.slot} EP1
-          </div>
-
-          {/* Stages */}
-          <div className="absolute left-0 top-0 w-full h-full">
-            {renderStages(slot.endpoint1, slot.endpoint2, firstTimestamp, pixelsPerMs, 'EP1', slot.slot)}
-          </div>
-        </div>
-
-        {/* EP2 Row */}
-        <div 
-          className="relative border-b border-border/50 transition-all"
-          style={{ height: rowHeight }}
-        >
-          {/* Label */}
-          <div className={cn(
-            "absolute left-2 text-sm font-mono z-10",
-            ENDPOINT_COLORS.ep2
-          )}>
-            {slot.slot} EP2
-          </div>
-
-          {/* Stages */}
-          <div className="absolute left-0 top-0 w-full h-full">
-            {renderStages(slot.endpoint2, slot.endpoint1, firstTimestamp, pixelsPerMs, 'EP2', slot.slot)}
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  const renderGroupHeader = (startIndex: number) => {
-    const endIndex = Math.min(startIndex + 9, data.slots.length - 1)
-    return (
-      <div 
-        key={`header-${startIndex}`}
-        className="sticky left-0 z-10 bg-background/95 backdrop-blur-sm border-b text-sm font-semibold p-2"
-        style={{ height: groupHeaderHeight }}
-      >
-        Slots {data.slots[startIndex].slot} - {data.slots[endIndex].slot}
-      </div>
-    )
-  }
-
+  // Render stages for an endpoint
   const renderStages = (
     endpoint: SlotDetail,
     otherEndpoint: SlotDetail,
     baseTime: number,
     scale: number,
     endpointName: string,
-    slotNumber: number
+    slotNumber: number,
+    yOffset: number
   ) => {
     const stages = processStages(endpoint, otherEndpoint)
     
-    return (
-      <>
-        {stages.map((stage, idx) => {
-          const relativeStart = (stage.startTime - baseTime) * scale + 150
-          const width = Math.max(stage.duration * scale, 2)
+    return stages.map((stage, idx) => {
+      const relativeStart = (stage.startTime - baseTime) * scale
+      const width = Math.max(stage.duration * scale, 2)
+      
+      // Calculate vertical position based on parallel index
+      const y = yOffset + SLOT_HEIGHT / 2 + stage.parallelIndex * (STAGE_HEIGHT + STAGE_SPACING)
 
-          // Calculate vertical position based on parallel index
-          const yPosition = `${ROW_HEIGHT / 2 + stage.parallelIndex * (STAGE_HEIGHT + STAGE_SPACING)}px`
-
-          return (
-            <div
-              key={`${stage.type}-${idx}`}
-              className={cn(
-                "absolute flex items-center justify-center rounded text-xs text-white font-semibold transition-all cursor-pointer hover:z-10 hover:brightness-110",
-                stage.type === 'waiting' ? "bg-gray-500 opacity-70 border-2 border-dashed border-gray-300" : STAGE_COLORS[stage.type as keyof typeof STAGE_COLORS]
-              )}
-              style={{
-                left: `${relativeStart}px`,
-                top: yPosition,
-                transform: 'translateY(-50%)',
-                width: `${width}px`,
-                height: `${STAGE_HEIGHT}px`,
-                backgroundImage: stage.type === 'waiting' ? 
-                  'repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(255,255,255,0.1) 5px, rgba(255,255,255,0.1) 10px)' : 
-                  undefined
-              }}
-              onMouseEnter={(e) => handleMouseEnter(e, slotNumber, endpoint, endpointName)}
-              onMouseMove={handleMouseMove}
-              onMouseLeave={handleMouseLeave}
-            >
-              {width > 60 && (
-                <span className="truncate px-2 text-[11px]">
-                  {stage.label}
-                </span>
-              )}
-              {width > 30 && width <= 60 && (
-                <span className="truncate px-1 text-[10px]">
-                  {stage.type === 'waiting' ? '⏱' : stage.type.substring(0, 1).toUpperCase()} {Math.round(stage.duration)}
-                </span>
-              )}
-              {width <= 30 && stage.type === 'waiting' && (
-                <span className="text-[10px]">⏱</span>
-              )}
-            </div>
-          )
-        })}
-      </>
-    )
+      return (
+        <div
+          key={`${stage.type}-${idx}`}
+          className={cn(
+            "absolute flex items-center justify-center rounded text-xs text-white font-semibold transition-all cursor-pointer hover:z-20 hover:brightness-110",
+            stage.type === 'waiting' ? "bg-gray-500 opacity-70 border-2 border-dashed border-gray-300" : STAGE_COLORS[stage.type as keyof typeof STAGE_COLORS]
+          )}
+          style={{
+            left: `${relativeStart}px`,
+            top: `${y}px`,
+            transform: 'translateY(-50%)',
+            width: `${width}px`,
+            height: `${STAGE_HEIGHT}px`,
+            backgroundImage: stage.type === 'waiting' ? 
+              'repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(255,255,255,0.1) 5px, rgba(255,255,255,0.1) 10px)' : 
+              undefined
+          }}
+          onMouseEnter={(e) => handleStageMouseEnter(e, slotNumber, endpoint, endpointName)}
+          onMouseMove={handleStageMouseMove}
+          onMouseLeave={handleStageMouseLeave}
+        >
+          {width > 60 && (
+            <span className="truncate px-2 text-[11px]">
+              {stage.label}
+            </span>
+          )}
+          {width > 30 && width <= 60 && (
+            <span className="truncate px-1 text-[10px]">
+              {stage.type === 'waiting' ? '⏱' : stage.type.substring(0, 1).toUpperCase()} {Math.round(stage.duration)}
+            </span>
+          )}
+          {width <= 30 && stage.type === 'waiting' && (
+            <span className="text-[10px]">⏱</span>
+          )}
+        </div>
+      )
+    })
   }
 
   return (
     <div className="bg-card rounded-lg border overflow-hidden">
-      {/* Time axis header */}
-      <div className="sticky top-0 z-20 bg-card border-b h-10">
+      {/* Fixed header with time axis */}
+      <div className="sticky top-0 z-30 bg-card border-b" style={{ height: HEADER_HEIGHT }}>
         <TimeAxis 
           duration={totalDuration}
           zoom={zoom}
-          viewportOffset={viewportOffset}
+          viewportOffset={viewportOffset || 0}
         />
       </div>
 
-      {/* Timeline viewport with virtual scrolling */}
-      <div className="relative" style={{ height: '600px' }}>
-        {/* Horizontal scroll container */}
-        <div 
-          ref={horizontalScrollRef}
-          className="absolute inset-0 overflow-x-auto overflow-y-hidden"
-        >
-          <div style={{ width: timelineWidth, height: '100%' }}>
-            {/* Vertical virtual scroll container */}
-            <div
-              ref={parentRef}
-              className="h-full overflow-y-auto"
-            >
-              <div
+      {/* Scrollable timeline content */}
+      <div 
+        ref={scrollRef}
+        className={cn(
+          "relative overflow-auto", // Changed to allow both scrolls
+          isDragging ? "cursor-grabbing" : "cursor-grab"
+        )}
+        style={{ height: '600px' }} // Fixed viewport height
+        onScroll={handleScroll}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+      >
+        <div style={{ width: timelineWidth, height: totalHeight, position: 'relative' }}>
+          {/* EP1 Timeline */}
+          <div className="absolute top-0 left-0 right-0" style={{ height: ep1Height }}>
+            <div className="absolute left-4 top-4 z-10">
+              <span className={cn("text-sm font-semibold", ENDPOINT_COLORS.ep1)}>
+                Endpoint 1 ({maxEp1Lanes} lane{maxEp1Lanes > 1 ? 's' : ''})
+              </span>
+            </div>
+            
+            {/* Render all slots for EP1 */}
+            {ep1Slots.map(({ slot, lane }) => (
+              <div 
+                key={`ep1-${slot.slot}`}
+                className="absolute"
                 style={{
-                  height: `${rowVirtualizer.getTotalSize()}px`,
-                  width: '100%',
-                  position: 'relative',
+                  top: `${TIMELINE_PADDING + lane * SLOT_HEIGHT}px`,
+                  height: SLOT_HEIGHT,
+                  left: 0,
+                  right: 0
                 }}
               >
-                {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                  const item = virtualItems[virtualRow.index]
-                  
-                  return (
-                    <div
-                      key={virtualRow.key}
-                      data-index={virtualRow.index}
-                      ref={rowVirtualizer.measureElement}
-                      className="absolute top-0 left-0 w-full"
-                      style={{
-                        transform: `translateY(${virtualRow.start}px)`,
-                      }}
-                    >
-                      {item.type === 'header' 
-                        ? renderGroupHeader(item.data as number)
-                        : renderVirtualSlot(item.data as SlotComparison, virtualRow.index)
-                      }
-                    </div>
-                  )
-                })}
+                {/* Slot divider and label */}
+                <div
+                  className="absolute top-0 bottom-0 border-l border-border/30"
+                  style={{
+                    left: `${((slot.endpoint1.transitions[0]?.timestamp || firstTimestamp) - firstTimestamp) * pixelsPerMs}px`
+                  }}
+                >
+                  <span className="absolute -top-5 left-1 text-xs text-muted-foreground">
+                    {slot.slot}
+                  </span>
+                </div>
+                
+                {/* Stages */}
+                {renderStages(
+                  slot.endpoint1,
+                  slot.endpoint2,
+                  firstTimestamp,
+                  pixelsPerMs,
+                  'EP1',
+                  slot.slot,
+                  0
+                )}
               </div>
+            ))}
+          </div>
+
+          {/* Divider between timelines */}
+          <div className="absolute left-0 right-0 border-t-2 border-border" style={{ top: ep1Height }} />
+
+          {/* EP2 Timeline */}
+          <div className="absolute left-0 right-0" style={{ top: ep1Height + 40, height: ep2Height }}>
+            <div className="absolute left-4 top-4 z-10">
+              <span className={cn("text-sm font-semibold", ENDPOINT_COLORS.ep2)}>
+                Endpoint 2 ({maxEp2Lanes} lane{maxEp2Lanes > 1 ? 's' : ''})
+              </span>
             </div>
+            
+            {/* Render all slots for EP2 */}
+            {ep2Slots.map(({ slot, lane }) => (
+              <div 
+                key={`ep2-${slot.slot}`}
+                className="absolute"
+                style={{
+                  top: `${TIMELINE_PADDING + lane * SLOT_HEIGHT}px`,
+                  height: SLOT_HEIGHT,
+                  left: 0,
+                  right: 0
+                }}
+              >
+                {/* Slot divider */}
+                <div
+                  className="absolute top-0 bottom-0 border-l border-border/30"
+                  style={{
+                    left: `${((slot.endpoint2.transitions[0]?.timestamp || firstTimestamp) - firstTimestamp) * pixelsPerMs}px`
+                  }}
+                />
+                
+                {/* Stages */}
+                {renderStages(
+                  slot.endpoint2,
+                  slot.endpoint1,
+                  firstTimestamp,
+                  pixelsPerMs,
+                  'EP2',
+                  slot.slot,
+                  0
+                )}
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -572,7 +544,7 @@ function TimeAxis({
   const ticks = []
 
   for (let time = 0; time <= duration; time += tickInterval) {
-    const x = time * pixelsPerMs + 150 - viewportOffset
+    const x = time * pixelsPerMs - viewportOffset
     
     if (x >= -50 && x <= window.innerWidth) {
       ticks.push(
@@ -591,9 +563,6 @@ function TimeAxis({
 
   return (
     <div className="relative h-full overflow-hidden">
-      <div className="absolute left-0 top-0 bottom-0 w-36 bg-card z-10 border-r flex items-center px-2">
-        <span className="text-xs font-semibold text-muted-foreground">Time</span>
-      </div>
       {ticks}
     </div>
   )

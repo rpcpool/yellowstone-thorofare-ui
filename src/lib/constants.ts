@@ -11,7 +11,7 @@ export const STAGE_LABELS = {
   replay: "Replay",
   confirmation: "Confirm",
   finalization: "Finalize",
-  waiting: "Waiting",
+  first_shred_delay: "Delay",
 } as const;
 
 export const ENDPOINT_COLORS = {
