@@ -11,7 +11,8 @@ import {
 } from "@/components/ui/tooltip"
 
 interface BenchmarkStatisticsProps {
-  data: BenchmarkResult
+  data: BenchmarkResult,
+  endpointNames?: [string | null, string | null]
 }
 
 interface StageStats {
@@ -32,7 +33,7 @@ interface EndpointStageStats {
   }
 }
 
-export function BenchmarkStatistics({ data }: BenchmarkStatisticsProps) {
+export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatisticsProps) {
   // Better colors for contrast
   const EP1_COLOR = "#F052FF"
   const EP2_COLOR = "#4A90FF"
@@ -221,6 +222,10 @@ export function BenchmarkStatistics({ data }: BenchmarkStatisticsProps) {
   }
 
   const getEndpointShortName = (idx: number) => {
+    // Use custom name if available
+    if (endpointNames?.[idx]) {
+      return endpointNames[idx]!
+    }
     const endpoint = data.endpoints[idx].endpoint
     return parseEndpointName(endpoint)
   }
@@ -348,9 +353,7 @@ export function BenchmarkStatistics({ data }: BenchmarkStatisticsProps) {
                   <div className="flex items-center gap-2 mb-2">
                     <div className="w-2 h-2 rounded-full" style={{ backgroundColor: EP1_COLOR }} />
                     <span className="text-xs font-semibold" style={{ color: EP1_COLOR }}>
-                      {data.endpoints[0].endpoint.length > 30 
-                        ? getEndpointShortName(0) 
-                        : data.endpoints[0].endpoint}
+                      {getEndpointShortName(0)}
                     </span>
                   </div>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
@@ -375,9 +378,7 @@ export function BenchmarkStatistics({ data }: BenchmarkStatisticsProps) {
                   <div className="flex items-center gap-2 mb-2">
                     <div className="w-2 h-2 rounded-full" style={{ backgroundColor: EP2_COLOR }} />
                     <span className="text-xs font-semibold" style={{ color: EP2_COLOR }}>
-                      {data.endpoints[1].endpoint.length > 30 
-                        ? getEndpointShortName(1) 
-                        : data.endpoints[1].endpoint}
+                      {getEndpointShortName(1)}
                     </span>
                   </div>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">

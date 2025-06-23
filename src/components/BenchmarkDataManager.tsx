@@ -22,6 +22,8 @@ interface StoredBenchmark {
   name: string;
   timestamp: number;
   data: BenchmarkResult;
+  endpoint1Name?: string | null;
+  endpoint2Name?: string | null;
 }
 
 interface BenchmarkDataManagerProps {
@@ -155,6 +157,8 @@ export function BenchmarkDataManager({
             name,
             timestamp: Date.now(),
             data,
+            endpoint1Name: null,
+            endpoint2Name: null,
           };
 
           // Add to storage
@@ -466,7 +470,7 @@ export function BenchmarkDataManager({
                                   
                                   <div className="mt-2 text-xs">
                                     <span className="text-muted-foreground">
-                                      {getEndpointShortName(benchmark.data.endpoints[0].endpoint)} vs {getEndpointShortName(benchmark.data.endpoints[1].endpoint)}
+                                      {benchmark.endpoint1Name || getEndpointShortName(benchmark.data.endpoints[0].endpoint)} vs {benchmark.endpoint2Name || getEndpointShortName(benchmark.data.endpoints[1].endpoint)}
                                     </span>
                                   </div>
                                 </>

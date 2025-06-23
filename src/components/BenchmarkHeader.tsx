@@ -10,6 +10,8 @@ import {
 } from "@/components/ui/collapsible"
 import { Button } from "@/components/ui/button"
 import { parseVersion, formatVersionDisplay, parseEndpointName } from "@/lib/endpoint-utils"
+import { Pencil, Check, X } from "lucide-react"
+import { Input } from "@/components/ui/input"
 import {
   Dialog,
   DialogContent,
@@ -26,6 +28,8 @@ interface BenchmarkHeaderProps {
   selectedBenchmarkId?: string | null
   benchmarksCount?: number
   onNameChange?: () => void
+  endpointNames?: [string | null, string | null]
+  onEndpointNameChange?: (endpointIndex: 0 | 1, newName: string) => void
 }
 
 export function BenchmarkHeader({ 
@@ -34,8 +38,12 @@ export function BenchmarkHeader({
   onBenchmarkChange,
   selectedBenchmarkId,
   benchmarksCount = 0,
-  onNameChange
+  onNameChange,
+  endpointNames,
+  onEndpointNameChange
 }: BenchmarkHeaderProps) {
+  const [editingEndpoint, setEditingEndpoint] = useState<0 | 1 | null>(null)
+  const [editingName, setEditingName] = useState("")
   const { metadata, endpoints, version, with_load, grpc_config, endpoint1_summary, endpoint2_summary } = data
   const [isConfigOpen, setIsConfigOpen] = useState(false)
   const [isDataManagerOpen, setIsDataManagerOpen] = useState(false)
@@ -61,8 +69,12 @@ export function BenchmarkHeader({
     return null
   }
   
-
   const getShortName = (endpoint: string) => {
+    // Find which endpoint this is
+    const idx = endpoints.findIndex(e => e.endpoint === endpoint)
+    if (idx !== -1 && endpointNames?.[idx]) {
+      return endpointNames[idx]!
+    }
     return parseEndpointName(endpoint);
   }
   
@@ -217,8 +229,12 @@ export function BenchmarkHeader({
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         {endpoints.map((endpoint, idx) => {
           const versionInfo = parseVersion(endpoint.plugin_version);
+          const isEditing = editingEndpoint === idx;
+          const customName = endpointNames?.[idx] || null;
+          const displayName = customName || parseEndpointName(endpoint.endpoint);
+          
           return (
-            <Card key={idx} className="p-4 border-border/50 hover:border-[#8424D1]/50 transition-colors">
+            <Card key={idx} className="p-4 border-border/50 hover:border-[#8424D1]/50 transition-colors group">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
                   <div className={`w-3 h-3 rounded-full ${
@@ -237,14 +253,83 @@ export function BenchmarkHeader({
                   </Badge>
                 </div>
               </div>
-              <p className="text-sm text-muted-foreground break-all font-mono mb-1">
-                {parseEndpointName(endpoint.endpoint)}
+              
+              {/* Custom name with edit functionality */}
+              <div className="flex items-center gap-2 mb-2">
+                {isEditing ? (
+                  <>
+                    <Input
+                      value={editingName}
+                      onChange={(e) => setEditingName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          onEndpointNameChange?.(idx as 0 | 1, editingName)
+                          setEditingEndpoint(null)
+                        } else if (e.key === 'Escape') {
+                          setEditingEndpoint(null)
+                        }
+                      }}
+                      className="h-7 text-sm flex-1"
+                      autoFocus
+                      placeholder="Custom name (empty to reset)"
+                    />
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7"
+                      onClick={() => {
+                        onEndpointNameChange?.(idx as 0 | 1, editingName)
+                        setEditingEndpoint(null)
+                      }}
+                    >
+                      <Check className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7"
+                      onClick={() => setEditingEndpoint(null)}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">{displayName}</p>
+                      {customName && (
+                        <p className="text-xs text-muted-foreground">
+                          Original: {parseEndpointName(endpoint.endpoint)}
+                        </p>
+                      )}
+                    </div>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={() => {
+                        setEditingEndpoint(idx as 0 | 1)
+                        setEditingName(customName || "")
+                      }}
+                      title="Set custom name"
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </Button>
+                  </>
+                )}
+              </div>
+              
+              {/* Full URL with protocol */}
+              <p className="text-xs text-muted-foreground break-all font-mono mb-1">
+                {endpoint.endpoint}
               </p>
+              
               {versionInfo.hostname && (
                 <p className="text-xs text-muted-foreground mb-2">
                   Host: {versionInfo.hostname}
                 </p>
               )}
+              
               <div className="grid grid-cols-3 gap-2">
                 <div>
                   <p className="text-xs text-muted-foreground">Avg Ping</p>

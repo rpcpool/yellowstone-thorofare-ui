@@ -11,7 +11,8 @@ interface TimelineProps {
   zoom: number
   viewportOffset?: number
   onViewportChange?: (offset: number) => void
-  visibleStages: StageVisibility
+  visibleStages: StageVisibility,
+  endpointNames?: [string | null, string | null]
 }
 
 interface TooltipState {
@@ -114,7 +115,7 @@ function formatTime(ms: number): string {
   return `${ms}ms`
 }
 
-export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, visibleStages }: TimelineProps) {
+export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, visibleStages, endpointNames }: TimelineProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [dragStart, setDragStart] = useState({ x: 0, scrollLeft: 0 })
@@ -575,7 +576,7 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
           <div className="absolute top-0 left-0 right-0" style={{ height: ep1Height }}>
             <div className="absolute left-4 top-4 z-10">
               <span className={cn("text-sm font-semibold", ENDPOINT_COLORS.ep1)}>
-                Endpoint 1 ({maxEp1Lanes} lane{maxEp1Lanes > 1 ? 's' : ''})
+                {endpointNames?.[0] || parseEndpointName(data.endpoints[0].endpoint)} ({maxEp1Lanes} lane{maxEp1Lanes > 1 ? 's' : ''})
               </span>
             </div>
             
@@ -614,7 +615,7 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
                   slot.endpoint2,
                   firstTimestamp,
                   pixelsPerMs,
-                  parseEndpointName(data.endpoints[0].endpoint),
+                  endpointNames?.[0] || parseEndpointName(data.endpoints[0].endpoint),
                   slot.slot,
                   0
                 )}
@@ -629,7 +630,7 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
           <div className="absolute left-0 right-0" style={{ top: ep1Height + 40, height: ep2Height }}>
             <div className="absolute left-4 top-4 z-10">
               <span className={cn("text-sm font-semibold", ENDPOINT_COLORS.ep2)}>
-                Endpoint 2 ({maxEp2Lanes} lane{maxEp2Lanes > 1 ? 's' : ''})
+                {endpointNames?.[1] || parseEndpointName(data.endpoints[1].endpoint)} ({maxEp2Lanes} lane{maxEp2Lanes > 1 ? 's' : ''})
               </span>
             </div>
             
@@ -664,7 +665,7 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
                   slot.endpoint1,
                   firstTimestamp,
                   pixelsPerMs,
-                  parseEndpointName(data.endpoints[1].endpoint),
+                  endpointNames?.[1] || parseEndpointName(data.endpoints[1].endpoint),
                   slot.slot,
                   0
                 )}

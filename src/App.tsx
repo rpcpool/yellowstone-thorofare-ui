@@ -8,6 +8,7 @@ import { PIXELS_PER_MS } from "@/lib/constants"
 import type { BenchmarkResult } from "./lib/types"
 
 function App() {
+  const [currentEndpointNames, setCurrentEndpointNames] = useState<[string | null, string | null]>([null, null])
   const [benchmarkData, setBenchmarkData] = useState<BenchmarkResult | null>(null)
   const [selectedBenchmarkId, setSelectedBenchmarkId] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0) // Add this to force refresh
@@ -102,11 +103,66 @@ function App() {
     setViewportOffset(0)
   }
   
+
   // Handler for benchmark changes
   const handleBenchmarkChange = (data: BenchmarkResult | null, id?: string) => {
     setBenchmarkData(data)
     setSelectedBenchmarkId(id || null)
-    setRefreshKey(prev => prev + 1) // Force refresh to update name
+    setRefreshKey(prev => prev + 1)
+    
+    // Load endpoint names for this benchmark
+    if (id) {
+      try {
+        const stored = localStorage.getItem("yellowstone-benchmarks")
+        if (stored) {
+          const benchmarks = JSON.parse(stored)
+          const benchmark = benchmarks.find((b: any) => b.id === id)
+          if (benchmark) {
+            setCurrentEndpointNames([
+              benchmark.endpoint1Name || null,
+              benchmark.endpoint2Name || null
+            ])
+          }
+        }
+      } catch {
+        setCurrentEndpointNames([null, null])
+      }
+    } else {
+      setCurrentEndpointNames([null, null])
+    }
+  }
+
+  // Handler for endpoint name changes
+  const handleEndpointNameChange = (endpointIndex: 0 | 1, newName: string) => {
+      console.log('Changing endpoint', endpointIndex, 'to', newName)
+    if (!selectedBenchmarkId) return
+    
+    // Update in localStorage
+    try {
+      const stored = localStorage.getItem("yellowstone-benchmarks")
+      if (stored) {
+        const benchmarks = JSON.parse(stored)
+        const updated = benchmarks.map((b: any) => {
+          if (b.id === selectedBenchmarkId) {
+            if (endpointIndex === 0) {
+              return { ...b, endpoint1Name: newName || null }
+            } else {
+              return { ...b, endpoint2Name: newName || null }
+            }
+          }
+          return b
+        })
+        localStorage.setItem("yellowstone-benchmarks", JSON.stringify(updated))
+        
+        // Update local state
+        const newNames: [string | null, string | null] = [...currentEndpointNames]
+        newNames[endpointIndex] = newName || null
+        setCurrentEndpointNames(newNames)
+        setRefreshKey(prev => prev + 1)
+      }
+    } catch (error) {
+      console.error("Failed to update endpoint name:", error)
+    }
   }
 
   // Get current benchmark name (with refresh key dependency)
@@ -175,6 +231,10 @@ function App() {
           const mostRecent = benchmarks.sort((a: any, b: any) => b.timestamp - a.timestamp)[0]
           setBenchmarkData(mostRecent.data)
           setSelectedBenchmarkId(mostRecent.id)
+          setCurrentEndpointNames([
+            mostRecent.endpoint1Name || null,
+            mostRecent.endpoint2Name || null
+          ])
         }
       }
     } catch (error) {
@@ -215,16 +275,21 @@ function App() {
           // Show benchmark visualization when data is loaded
           <div className="w-full space-y-4 sm:space-y-6">
             <BenchmarkHeader 
-              key={refreshKey} // Force re-render when name changes
+              key={refreshKey}
               data={benchmarkData} 
               currentBenchmarkName={getCurrentBenchmarkName()}
               onBenchmarkChange={handleBenchmarkChange}
               selectedBenchmarkId={selectedBenchmarkId}
               benchmarksCount={getBenchmarksCount()}
               onNameChange={() => setRefreshKey(prev => prev + 1)}
+              endpointNames={currentEndpointNames}
+              onEndpointNameChange={handleEndpointNameChange}
             />
             
-            <BenchmarkStatistics data={benchmarkData} />
+            <BenchmarkStatistics 
+              data={benchmarkData} 
+              endpointNames={currentEndpointNames}
+            />
             
             <TimelineControls
               zoom={zoom}
@@ -243,6 +308,7 @@ function App() {
               viewportOffset={viewportOffset}
               onViewportChange={setViewportOffset}
               visibleStages={visibleStages}
+              endpointNames={currentEndpointNames}
             />
           </div>
         )}
