@@ -1,9 +1,22 @@
 export interface BenchmarkResult {
+  version: string;
+  with_load: boolean;
+  grpc_config: GrpcConfigSummary;
   metadata: Metadata;
   endpoints: [EndpointInfo, EndpointInfo];
   endpoint1_summary: EndpointSummary;
   endpoint2_summary: EndpointSummary;
   slots: SlotComparison[];
+}
+
+export interface GrpcConfigSummary {
+  connect_timeout_ms: number;
+  request_timeout_ms: number;
+  max_message_size: number;
+  use_tls: boolean;
+  http2_adaptive_window: boolean;
+  initial_connection_window_size: number | null;
+  initial_stream_window_size: number | null;
 }
 
 export interface Metadata {
@@ -17,6 +30,8 @@ export interface Metadata {
 
 export interface EndpointInfo {
   endpoint: string;
+  plugin_type: string;
+  plugin_version: string;
   avg_ping_ms: number;
   total_updates: number;
   unique_slots: number;
@@ -24,6 +39,7 @@ export interface EndpointInfo {
 
 export interface EndpointSummary {
   first_shred_delay: Percentiles;
+  processing_delay: Percentiles;
   download_time: Percentiles;
   replay_time: Percentiles;
   confirmation_time: Percentiles;
@@ -44,6 +60,7 @@ export interface SlotComparison {
 
 export interface SlotDetail {
   first_shred_delay_ms: number | null;
+  processing_delay_ms: number | null;
   transitions: Transition[];
   durations: StageDurations;
 }

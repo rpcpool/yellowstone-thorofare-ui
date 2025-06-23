@@ -1,6 +1,7 @@
 import { Card } from "@/components/ui/card"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import type { BenchmarkResult } from "@/lib/types"
-import { Activity, Clock, Zap, AlertCircle, Info } from "lucide-react"
+import { Clock, Zap, AlertCircle, Info } from "lucide-react"
 import {
   Tooltip,
   TooltipContent,
@@ -24,39 +25,39 @@ interface EndpointStageStats {
   ep1: StageStats
   ep2: StageStats
   diff: {
-    p50: number
-    p90: number
-    p99: number
+    p50: { value: number; faster: 'ep1' | 'ep2' | 'tie' }
+    p90: { value: number; faster: 'ep1' | 'ep2' | 'tie' }
+    p99: { value: number; faster: 'ep1' | 'ep2' | 'tie' }
   }
 }
 
 export function BenchmarkStatistics({ data }: BenchmarkStatisticsProps) {
+  // Better colors for contrast
+  const EP1_COLOR = "#F052FF"
+  const EP2_COLOR = "#4A90FF"
+
   // Calculate which endpoint sees slots first
   const calculateFirstSeenStats = () => {
     let ep1First = 0
     let ep2First = 0
     let simultaneous = 0
-    const totalWaitingTime = { ep1: 0, ep2: 0 }
-    const waitingCounts = { ep1: 0, ep2: 0 }
+    const totalDelayTime = { ep1: 0, ep2: 0 }
+    const delayCounts = { ep1: 0, ep2: 0 }
 
     data.slots.forEach(slot => {
-      const ep1Start = slot.endpoint1.transitions[0]?.timestamp || 0
-      const ep2Start = slot.endpoint2.transitions[0]?.timestamp || 0
+      const ep1Delay = slot.endpoint1.first_shred_delay_ms || 0
+      const ep2Delay = slot.endpoint2.first_shred_delay_ms || 0
       
-      if (Math.abs(ep1Start - ep2Start) < 1) { // Less than 1ms difference
+      if (ep1Delay === 0 && ep2Delay === 0) {
         simultaneous++
-      } else if (ep1Start < ep2Start) {
+      } else if (ep1Delay === 0 && ep2Delay > 0) {
         ep1First++
-        if (slot.endpoint2.first_shred_delay_ms) {
-          totalWaitingTime.ep2 += slot.endpoint2.first_shred_delay_ms
-          waitingCounts.ep2++
-        }
-      } else {
+        totalDelayTime.ep2 += ep2Delay
+        delayCounts.ep2++
+      } else if (ep2Delay === 0 && ep1Delay > 0) {
         ep2First++
-        if (slot.endpoint1.first_shred_delay_ms) {
-          totalWaitingTime.ep1 += slot.endpoint1.first_shred_delay_ms
-          waitingCounts.ep1++
-        }
+        totalDelayTime.ep1 += ep1Delay
+        delayCounts.ep1++
       }
     })
 
@@ -68,21 +69,52 @@ export function BenchmarkStatistics({ data }: BenchmarkStatisticsProps) {
       ep1Percentage: (ep1First / total) * 100,
       ep2Percentage: (ep2First / total) * 100,
       simultaneousPercentage: (simultaneous / total) * 100,
-      avgWaitingTime: {
-        ep1: waitingCounts.ep1 > 0 ? totalWaitingTime.ep1 / waitingCounts.ep1 : 0,
-        ep2: waitingCounts.ep2 > 0 ? totalWaitingTime.ep2 / waitingCounts.ep2 : 0
+      avgDelayTime: {
+        ep1: delayCounts.ep1 > 0 ? totalDelayTime.ep1 / delayCounts.ep1 : 0,
+        ep2: delayCounts.ep2 > 0 ? totalDelayTime.ep2 / delayCounts.ep2 : 0
       }
     }
   }
 
-  // Calculate stats for all stages
+  // Calculate stats for all stages including the new delay metrics
   const calculateStageStats = (): Record<string, EndpointStageStats> => {
-    const stages = ['download', 'replay', 'confirmation', 'finalization'] as const
+    const stages = [
+      'first_shred_delay',
+      'processing_delay', 
+      'download',
+      'replay',
+      'confirmation',
+      'finalization'
+    ] as const
+    
     const stats: Record<string, EndpointStageStats> = {}
 
     stages.forEach(stage => {
-      const ep1Values = data.slots.map(slot => slot.endpoint1.durations[`${stage}_ms`]).sort((a, b) => a - b)
-      const ep2Values = data.slots.map(slot => slot.endpoint2.durations[`${stage}_ms`]).sort((a, b) => a - b)
+      let ep1Values: number[] = []
+      let ep2Values: number[] = []
+
+      if (stage === 'first_shred_delay') {
+        ep1Values = data.slots
+          .map(slot => slot.endpoint1.first_shred_delay_ms || 0)
+          .sort((a, b) => a - b)
+        ep2Values = data.slots
+          .map(slot => slot.endpoint2.first_shred_delay_ms || 0)
+          .sort((a, b) => a - b)
+      } else if (stage === 'processing_delay') {
+        ep1Values = data.slots
+          .map(slot => slot.endpoint1.processing_delay_ms || 0)
+          .sort((a, b) => a - b)
+        ep2Values = data.slots
+          .map(slot => slot.endpoint2.processing_delay_ms || 0)
+          .sort((a, b) => a - b)
+      } else {
+        ep1Values = data.slots
+          .map(slot => slot.endpoint1.durations[`${stage}_ms`])
+          .sort((a, b) => a - b)
+        ep2Values = data.slots
+          .map(slot => slot.endpoint2.durations[`${stage}_ms`])
+          .sort((a, b) => a - b)
+      }
       
       const calculateStats = (values: number[]): StageStats => ({
         p50: values[Math.floor(values.length * 0.5)],
@@ -95,13 +127,27 @@ export function BenchmarkStatistics({ data }: BenchmarkStatisticsProps) {
       const ep1Stats = calculateStats(ep1Values)
       const ep2Stats = calculateStats(ep2Values)
       
+      const determineFaster = (ep1Val: number, ep2Val: number): 'ep1' | 'ep2' | 'tie' => {
+        if (Math.abs(ep1Val - ep2Val) < 0.01) return 'tie'
+        return ep1Val < ep2Val ? 'ep1' : 'ep2'
+      }
+      
       stats[stage] = {
         ep1: ep1Stats,
         ep2: ep2Stats,
         diff: {
-          p50: Math.abs(ep1Stats.p50 - ep2Stats.p50),
-          p90: Math.abs(ep1Stats.p90 - ep2Stats.p90),
-          p99: Math.abs(ep1Stats.p99 - ep2Stats.p99)
+          p50: { 
+            value: Math.abs(ep1Stats.p50 - ep2Stats.p50),
+            faster: determineFaster(ep1Stats.p50, ep2Stats.p50)
+          },
+          p90: { 
+            value: Math.abs(ep1Stats.p90 - ep2Stats.p90),
+            faster: determineFaster(ep1Stats.p90, ep2Stats.p90)
+          },
+          p99: { 
+            value: Math.abs(ep1Stats.p99 - ep2Stats.p99),
+            faster: determineFaster(ep1Stats.p99, ep2Stats.p99)
+          }
         }
       }
     })
@@ -139,34 +185,16 @@ export function BenchmarkStatistics({ data }: BenchmarkStatisticsProps) {
       })
     })
 
-    return outliers.sort((a, b) => b.zscore - a.zscore).slice(0, 10) // Get top 10 outliers
-  }
-
-  // Calculate total processing time
-  const calculateTotalProcessingTime = () => {
-    const totalTimes = { ep1: 0, ep2: 0 }
-    const stages = ['download', 'replay', 'confirmation', 'finalization'] as const
-    
-    data.slots.forEach(slot => {
-      stages.forEach(stage => {
-        totalTimes.ep1 += slot.endpoint1.durations[`${stage}_ms`]
-        totalTimes.ep2 += slot.endpoint2.durations[`${stage}_ms`]
-      })
-    })
-    
-    const avgEp1 = totalTimes.ep1 / data.slots.length
-    const avgEp2 = totalTimes.ep2 / data.slots.length
-    
-    return { avgEp1, avgEp2, difference: Math.abs(avgEp1 - avgEp2) }
+    return outliers.sort((a, b) => b.zscore - a.zscore)
   }
 
   const firstSeenStats = calculateFirstSeenStats()
   const stageStats = calculateStageStats()
   const outliers = findOutliers()
-  const totalProcessing = calculateTotalProcessingTime()
 
   const formatDuration = (ms: number) => {
-    if (ms < 1) return `${(ms * 1000).toFixed(0)}μs`
+    if (ms < 0.001) return `${(ms * 1000000).toFixed(0)}ns`
+    if (ms < 1) return `${(ms * 1000).toFixed(3)}μs`
     if (ms < 1000) return `${ms.toFixed(1)}ms`
     return `${(ms / 1000).toFixed(2)}s`
   }
@@ -174,10 +202,32 @@ export function BenchmarkStatistics({ data }: BenchmarkStatisticsProps) {
   const formatPercentage = (value: number) => `${value.toFixed(1)}%`
 
   const stageDescriptions = {
+    first_shred_delay: "Time difference between endpoints receiving first slot data",
+    processing_delay: "Time difference between endpoints processing the slot",
     download: "Time to download all shreds (data chunks) for the slot",
     replay: "Time to execute all transactions in the slot",
     confirmation: "Time for the slot to reach confirmation status",
     finalization: "Time for the slot to reach finalized status"
+  }
+
+  const stageLabels = {
+    first_shred_delay: "First Shred Delay",
+    processing_delay: "Processing Delay",
+    download: "Download",
+    replay: "Replay",
+    confirmation: "Confirmation",
+    finalization: "Finalization"
+  }
+
+  // Helper to get short endpoint name
+  const getShortEndpointName = (idx: number) => {
+    const endpoint = data.endpoints[idx].endpoint
+    try {
+      const url = new URL(endpoint)
+      return url.hostname.split('.')[0] // Get first part of hostname
+    } catch {
+      return `EP${idx + 1}`
+    }
   }
 
   return (
@@ -185,35 +235,9 @@ export function BenchmarkStatistics({ data }: BenchmarkStatisticsProps) {
       <div className="space-y-4">
         <h2 className="text-2xl font-bold">Performance Statistics</h2>
         
-        {/* First Row - Key Metrics */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Total Processing Time */}
-          <Card className="p-4">
-            <div className="flex items-center justify-between mb-2">
-              <Activity className="h-4 w-4 text-muted-foreground" />
-              <Tooltip>
-                <TooltipTrigger>
-                  <Info className="h-3 w-3 text-muted-foreground" />
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className="text-xs">Average total time to process a slot through all stages</p>
-                </TooltipContent>
-              </Tooltip>
-            </div>
-            <p className="text-sm text-muted-foreground">Avg Total Processing</p>
-            <div className="space-y-1">
-              <div className="flex justify-between text-sm">
-                <span className="text-[#DA05E2]">EP1:</span>
-                <span className="font-mono">{formatDuration(totalProcessing.avgEp1)}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-[#2C0FDF]">EP2:</span>
-                <span className="font-mono">{formatDuration(totalProcessing.avgEp2)}</span>
-              </div>
-            </div>
-          </Card>
-
-          {/* First Seen Distribution */}
+        {/* First Row - Key Metrics (removed Avg Total Processing) */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* First Shred Reception */}
           <Card className="p-4">
             <div className="flex items-center justify-between mb-2">
               <Zap className="h-4 w-4 text-muted-foreground" />
@@ -226,14 +250,14 @@ export function BenchmarkStatistics({ data }: BenchmarkStatisticsProps) {
                 </TooltipContent>
               </Tooltip>
             </div>
-            <p className="text-sm text-muted-foreground">Network Advantage</p>
+            <p className="text-sm text-muted-foreground">First Shred Reception</p>
             <div className="space-y-1">
               <div className="flex justify-between text-sm">
-                <span className="text-[#DA05E2]">EP1 First:</span>
+                <span style={{ color: EP1_COLOR }}>{getShortEndpointName(0)} First:</span>
                 <span className="font-mono">{formatPercentage(firstSeenStats.ep1Percentage)}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-[#2C0FDF]">EP2 First:</span>
+                <span style={{ color: EP2_COLOR }}>{getShortEndpointName(1)} First:</span>
                 <span className="font-mono">{formatPercentage(firstSeenStats.ep2Percentage)}</span>
               </div>
               <div className="flex justify-between text-sm">
@@ -243,7 +267,7 @@ export function BenchmarkStatistics({ data }: BenchmarkStatisticsProps) {
             </div>
           </Card>
 
-          {/* Average Waiting Time */}
+          {/* First Shred Delay */}
           <Card className="p-4">
             <div className="flex items-center justify-between mb-2">
               <Clock className="h-4 w-4 text-muted-foreground" />
@@ -256,15 +280,15 @@ export function BenchmarkStatistics({ data }: BenchmarkStatisticsProps) {
                 </TooltipContent>
               </Tooltip>
             </div>
-            <p className="text-sm text-muted-foreground">Network Latency</p>
+            <p className="text-sm text-muted-foreground">First Shred Delay</p>
             <div className="space-y-1">
               <div className="flex justify-between text-sm">
-                <span className="text-[#DA05E2]">EP1:</span>
-                <span className="font-mono">{formatDuration(firstSeenStats.avgWaitingTime.ep1)}</span>
+                <span style={{ color: EP1_COLOR }}>{getShortEndpointName(0)}:</span>
+                <span className="font-mono">{formatDuration(firstSeenStats.avgDelayTime.ep1)}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-[#2C0FDF]">EP2:</span>
-                <span className="font-mono">{formatDuration(firstSeenStats.avgWaitingTime.ep2)}</span>
+                <span style={{ color: EP2_COLOR }}>{getShortEndpointName(1)}:</span>
+                <span className="font-mono">{formatDuration(firstSeenStats.avgDelayTime.ep2)}</span>
               </div>
               <p className="text-xs text-muted-foreground mt-1">
                 When slower to receive
@@ -272,7 +296,7 @@ export function BenchmarkStatistics({ data }: BenchmarkStatisticsProps) {
             </div>
           </Card>
 
-          {/* Outliers */}
+          {/* Outliers with scroll */}
           <Card className="p-4">
             <div className="flex items-center justify-between mb-2">
               <AlertCircle className="h-4 w-4 text-muted-foreground" />
@@ -285,20 +309,19 @@ export function BenchmarkStatistics({ data }: BenchmarkStatisticsProps) {
                 </TooltipContent>
               </Tooltip>
             </div>
-            <p className="text-sm text-muted-foreground">Performance Outliers</p>
+            <p className="text-sm text-muted-foreground mb-2">Performance Outliers</p>
             {outliers.length > 0 ? (
-              <div className="space-y-1">
-                {outliers.slice(0, 5).map((outlier, idx) => (
-                  <div key={idx} className="text-xs">
-                    <span className="text-muted-foreground">Slot {outlier.slot}:</span>
-                    <span className="ml-1 font-mono">{outlier.endpoint} {outlier.stage}</span>
-                    <span className="ml-1 text-destructive">{formatDuration(outlier.duration)}</span>
-                  </div>
-                ))}
-                {outliers.length > 5 && (
-                  <p className="text-xs text-muted-foreground">...and {outliers.length - 5} more</p>
-                )}
-              </div>
+              <ScrollArea className="h-20">
+                <div className="space-y-1">
+                  {outliers.map((outlier, idx) => (
+                    <div key={idx} className="text-xs">
+                      <span className="text-muted-foreground">Slot {outlier.slot}:</span>
+                      <span className="ml-1 font-mono">{outlier.endpoint} {outlier.stage}</span>
+                      <span className="ml-1 text-destructive">{formatDuration(outlier.duration)}</span>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
             ) : (
               <p className="text-sm text-muted-foreground">No significant outliers</p>
             )}
@@ -308,12 +331,12 @@ export function BenchmarkStatistics({ data }: BenchmarkStatisticsProps) {
         {/* Second Row - Stage Performance (Separated by Endpoint) */}
         <div className="space-y-4">
           <h3 className="text-lg font-semibold">Stage Performance by Endpoint</h3>
-          <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {Object.entries(stageStats).map(([stage, stats]) => (
               <Card key={stage} className="p-4">
                 <div className="flex items-center justify-between mb-3">
-                  <h4 className="font-semibold text-sm capitalize">
-                    {stage}
+                  <h4 className="font-semibold text-sm">
+                    {stageLabels[stage as keyof typeof stageLabels]}
                   </h4>
                   <Tooltip>
                     <TooltipTrigger>
@@ -328,8 +351,12 @@ export function BenchmarkStatistics({ data }: BenchmarkStatisticsProps) {
                 {/* EP1 Stats */}
                 <div className="mb-3">
                   <div className="flex items-center gap-2 mb-2">
-                    <div className="w-2 h-2 rounded-full bg-[#DA05E2]" />
-                    <span className="text-xs font-semibold text-[#DA05E2]">Endpoint 1</span>
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: EP1_COLOR }} />
+                    <span className="text-xs font-semibold" style={{ color: EP1_COLOR }}>
+                      {data.endpoints[0].endpoint.length > 30 
+                        ? getShortEndpointName(0) 
+                        : data.endpoints[0].endpoint}
+                    </span>
                   </div>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
                     <div className="text-muted-foreground">P50:</div>
@@ -351,8 +378,12 @@ export function BenchmarkStatistics({ data }: BenchmarkStatisticsProps) {
                 {/* EP2 Stats */}
                 <div className="mb-3">
                   <div className="flex items-center gap-2 mb-2">
-                    <div className="w-2 h-2 rounded-full bg-[#2C0FDF]" />
-                    <span className="text-xs font-semibold text-[#2C0FDF]">Endpoint 2</span>
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: EP2_COLOR }} />
+                    <span className="text-xs font-semibold" style={{ color: EP2_COLOR }}>
+                      {data.endpoints[1].endpoint.length > 30 
+                        ? getShortEndpointName(1) 
+                        : data.endpoints[1].endpoint}
+                    </span>
                   </div>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
                     <div className="text-muted-foreground">P50:</div>
@@ -371,20 +402,50 @@ export function BenchmarkStatistics({ data }: BenchmarkStatisticsProps) {
                   </div>
                 </div>
                 
-                {/* Differences */}
+                {/* Differences with winner */}
                 <div className="pt-2 border-t">
                   <div className="text-xs space-y-1">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Δ P50:</span>
-                      <span className="font-mono">{formatDuration(stats.diff.p50)}</span>
+                      <span className="font-mono">
+                        {formatDuration(stats.diff.p50.value)}
+                        {stats.diff.p50.faster !== 'tie' && (
+                          <span 
+                            className="ml-1 text-[10px]"
+                            style={{ color: stats.diff.p50.faster === 'ep1' ? EP1_COLOR : EP2_COLOR }}
+                          >
+                            ({getShortEndpointName(stats.diff.p50.faster === 'ep1' ? 0 : 1)} faster)
+                          </span>
+                        )}
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Δ P90:</span>
-                      <span className="font-mono">{formatDuration(stats.diff.p90)}</span>
+                      <span className="font-mono">
+                        {formatDuration(stats.diff.p90.value)}
+                        {stats.diff.p90.faster !== 'tie' && (
+                          <span 
+                            className="ml-1 text-[10px]"
+                            style={{ color: stats.diff.p90.faster === 'ep1' ? EP1_COLOR : EP2_COLOR }}
+                          >
+                            ({getShortEndpointName(stats.diff.p90.faster === 'ep1' ? 0 : 1)} faster)
+                          </span>
+                        )}
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Δ P99:</span>
-                      <span className="font-mono">{formatDuration(stats.diff.p99)}</span>
+                      <span className="font-mono">
+                        {formatDuration(stats.diff.p99.value)}
+                        {stats.diff.p99.faster !== 'tie' && (
+                          <span 
+                            className="ml-1 text-[10px]"
+                            style={{ color: stats.diff.p99.faster === 'ep1' ? EP1_COLOR : EP2_COLOR }}
+                          >
+                            ({getShortEndpointName(stats.diff.p99.faster === 'ep1' ? 0 : 1)} faster)
+                          </span>
+                        )}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -403,8 +464,9 @@ export function BenchmarkStatistics({ data }: BenchmarkStatisticsProps) {
                   <li>• <span className="font-semibold">P90</span> = 90% of slots processed faster than this value</li>
                   <li>• <span className="font-semibold">P99</span> = 99% of slots processed faster than this value</li>
                   <li>• <span className="font-semibold">Δ (Delta)</span> = Absolute difference between endpoints</li>
-                  <li>• <span className="font-semibold">Network Advantage</span> = Which endpoint receives slot data first from the network</li>
-                  <li>• <span className="font-semibold">Network Latency</span> = How long the slower endpoint waits for slot data</li>
+                  <li>• <span className="font-semibold">First Shred Reception</span> = Which endpoint receives slot data first from the network</li>
+                  <li>• <span className="font-semibold">First Shred Delay</span> = How long the slower endpoint waits for slot data</li>
+                  <li>• <span className="font-semibold">Processing Delay</span> = Time difference between endpoints finishing processing</li>
                 </ul>
               </div>
             </div>

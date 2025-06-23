@@ -101,7 +101,7 @@ export function SlotTooltip({
         <h4 className="font-semibold text-sm text-foreground">Slot {slot} - {endpointName}</h4>
         {endpoint.first_shred_delay_ms !== null && endpoint.first_shred_delay_ms > 0 && (
           <p className="text-xs text-muted-foreground">
-            Waiting: {formatDuration(endpoint.first_shred_delay_ms)}
+            First Shred Delay: {formatDuration(endpoint.first_shred_delay_ms)}
             {endpoint.first_shred_delay_ms < 1 && (
               <span className="text-yellow-500 ml-1">(sub-millisecond)</span>
             )}

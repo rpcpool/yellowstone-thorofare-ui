@@ -2,7 +2,6 @@ import { useState } from "react"
 import { BenchmarkHeader } from "@/components/BenchmarkHeader"
 import { TimelineControls, type StageVisibility } from "@/components/TimelineControls"
 import { Timeline } from "@/components/Timeline"
-import { Minimap } from "@/components/Minimap"
 import { PIXELS_PER_MS } from "@/lib/constants"
 import sampleDataBase from "@/data/sample-benchmark.json"
 import type { BenchmarkResult } from "./lib/types"
@@ -60,7 +59,7 @@ function App() {
     })
     
     const totalDuration = lastTimestamp - firstTimestamp
-    const viewportWidth = window.innerWidth - 200 // Account for padding and labels
+    const viewportWidth = window.innerWidth * 0.7 - 200 // Account for 70% width and padding
     const optimalZoom = viewportWidth / (totalDuration * PIXELS_PER_MS * 1.1)
     
     setZoom(Math.max(0.1, Math.min(optimalZoom, 10)))
@@ -70,10 +69,8 @@ function App() {
   return (
     <div className="min-h-screen min-w-screen bg-background py-8 px-[15%] overflow-x-hidden overflow-y-hidden">
       <div className="w-full space-y-6">
-        <BenchmarkHeader data={sampleData} version="1.0.0" />
-        <BenchmarkStatistics 
-          data={sampleData} 
-        />
+        <BenchmarkHeader data={sampleData} />
+        <BenchmarkStatistics data={sampleData} />
         
         <TimelineControls
           zoom={zoom}
@@ -84,14 +81,6 @@ function App() {
           onZoomChange={setZoom}
           visibleStages={visibleStages}
           onVisibleStagesChange={setVisibleStages}
-        />
-        
-        <Minimap
-          data={sampleData}
-          zoom={zoom}
-          viewportOffset={viewportOffset}
-          onViewportChange={setViewportOffset}
-          visibleStages={visibleStages}
         />
         
         <Timeline 

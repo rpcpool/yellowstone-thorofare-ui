@@ -74,7 +74,7 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
     // Get the other endpoint's first timestamp
     const otherFirstShred = otherEndpoint.transitions.find(t => t.status === "FirstShredReceived")?.timestamp || 0
 
-    // Add waiting time block if this endpoint was slower
+    // Add waiting time block if this endpoint was slower (first shred delay)
     if (endpoint.first_shred_delay_ms !== null && endpoint.first_shred_delay_ms !== undefined && endpoint.first_shred_delay_ms > 0) {
       // This endpoint had to wait for the other one
       // The waiting block shows from when the faster endpoint started to when this one started
