@@ -68,9 +68,9 @@ function App() {
   }
   
   return (
-    <div className="min-h-screen min-w-screen bg-background py-8 px-[15%] overflow-hidden">
+    <div className="min-h-screen min-w-screen bg-background py-8 px-[15%] overflow-x-hidden overflow-y-hidden">
       <div className="w-full space-y-6">
-        <BenchmarkHeader data={sampleData} />
+        <BenchmarkHeader data={sampleData} version="1.0.0" />
         <BenchmarkStatistics 
           data={sampleData} 
         />

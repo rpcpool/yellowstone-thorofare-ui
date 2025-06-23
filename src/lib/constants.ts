@@ -15,8 +15,8 @@ export const STAGE_LABELS = {
 } as const;
 
 export const ENDPOINT_COLORS = {
-  ep1: "text-blue-500",
-  ep2: "text-green-500",
+  ep1: "text-[#DA05E2]",
+  ep2: "text-[#2C0FDF]",
 } as const;
 
 export const PIXELS_PER_MS = 1; // Base scale for timeline

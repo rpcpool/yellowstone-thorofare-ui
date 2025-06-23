@@ -47,14 +47,14 @@ export function BenchmarkStatistics({ data }: BenchmarkStatisticsProps) {
         simultaneous++
       } else if (ep1Start < ep2Start) {
         ep1First++
-        if (slot.endpoint2.waiting_time_ms) {
-          totalWaitingTime.ep2 += slot.endpoint2.waiting_time_ms
+        if (slot.endpoint2.first_shred_delay_ms) {
+          totalWaitingTime.ep2 += slot.endpoint2.first_shred_delay_ms
           waitingCounts.ep2++
         }
       } else {
         ep2First++
-        if (slot.endpoint1.waiting_time_ms) {
-          totalWaitingTime.ep1 += slot.endpoint1.waiting_time_ms
+        if (slot.endpoint1.first_shred_delay_ms) {
+          totalWaitingTime.ep1 += slot.endpoint1.first_shred_delay_ms
           waitingCounts.ep1++
         }
       }
@@ -203,11 +203,11 @@ export function BenchmarkStatistics({ data }: BenchmarkStatisticsProps) {
             <p className="text-sm text-muted-foreground">Avg Total Processing</p>
             <div className="space-y-1">
               <div className="flex justify-between text-sm">
-                <span className="text-blue-500">EP1:</span>
+                <span className="text-[#DA05E2]">EP1:</span>
                 <span className="font-mono">{formatDuration(totalProcessing.avgEp1)}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-green-500">EP2:</span>
+                <span className="text-[#2C0FDF]">EP2:</span>
                 <span className="font-mono">{formatDuration(totalProcessing.avgEp2)}</span>
               </div>
             </div>
@@ -229,11 +229,11 @@ export function BenchmarkStatistics({ data }: BenchmarkStatisticsProps) {
             <p className="text-sm text-muted-foreground">Network Advantage</p>
             <div className="space-y-1">
               <div className="flex justify-between text-sm">
-                <span className="text-blue-500">EP1 First:</span>
+                <span className="text-[#DA05E2]">EP1 First:</span>
                 <span className="font-mono">{formatPercentage(firstSeenStats.ep1Percentage)}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-green-500">EP2 First:</span>
+                <span className="text-[#2C0FDF]">EP2 First:</span>
                 <span className="font-mono">{formatPercentage(firstSeenStats.ep2Percentage)}</span>
               </div>
               <div className="flex justify-between text-sm">
@@ -259,11 +259,11 @@ export function BenchmarkStatistics({ data }: BenchmarkStatisticsProps) {
             <p className="text-sm text-muted-foreground">Network Latency</p>
             <div className="space-y-1">
               <div className="flex justify-between text-sm">
-                <span className="text-blue-500">EP1:</span>
+                <span className="text-[#DA05E2]">EP1:</span>
                 <span className="font-mono">{formatDuration(firstSeenStats.avgWaitingTime.ep1)}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-green-500">EP2:</span>
+                <span className="text-[#2C0FDF]">EP2:</span>
                 <span className="font-mono">{formatDuration(firstSeenStats.avgWaitingTime.ep2)}</span>
               </div>
               <p className="text-xs text-muted-foreground mt-1">
@@ -328,8 +328,8 @@ export function BenchmarkStatistics({ data }: BenchmarkStatisticsProps) {
                 {/* EP1 Stats */}
                 <div className="mb-3">
                   <div className="flex items-center gap-2 mb-2">
-                    <div className="w-2 h-2 rounded-full bg-blue-500" />
-                    <span className="text-xs font-semibold text-blue-500">Endpoint 1</span>
+                    <div className="w-2 h-2 rounded-full bg-[#DA05E2]" />
+                    <span className="text-xs font-semibold text-[#DA05E2]">Endpoint 1</span>
                   </div>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
                     <div className="text-muted-foreground">P50:</div>
@@ -351,8 +351,8 @@ export function BenchmarkStatistics({ data }: BenchmarkStatisticsProps) {
                 {/* EP2 Stats */}
                 <div className="mb-3">
                   <div className="flex items-center gap-2 mb-2">
-                    <div className="w-2 h-2 rounded-full bg-green-500" />
-                    <span className="text-xs font-semibold text-green-500">Endpoint 2</span>
+                    <div className="w-2 h-2 rounded-full bg-[#2C0FDF]" />
+                    <span className="text-xs font-semibold text-[#2C0FDF]">Endpoint 2</span>
                   </div>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
                     <div className="text-muted-foreground">P50:</div>

@@ -75,15 +75,15 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
     const otherFirstShred = otherEndpoint.transitions.find(t => t.status === "FirstShredReceived")?.timestamp || 0
 
     // Add waiting time block if this endpoint was slower
-    if (endpoint.waiting_time_ms !== null && endpoint.waiting_time_ms !== undefined && endpoint.waiting_time_ms > 0) {
+    if (endpoint.first_shred_delay_ms !== null && endpoint.first_shred_delay_ms !== undefined && endpoint.first_shred_delay_ms > 0) {
       // This endpoint had to wait for the other one
       // The waiting block shows from when the faster endpoint started to when this one started
       stages.push({
         type: 'waiting',
         startTime: otherFirstShred,  // When the faster endpoint started
         endTime: firstShred,         // When this endpoint started
-        duration: endpoint.waiting_time_ms,
-        label: `Wait ${endpoint.waiting_time_ms.toFixed(1)}ms`,
+        duration: endpoint.first_shred_delay_ms,
+        label: `Wait ${endpoint.first_shred_delay_ms.toFixed(1)}ms`,
         parallel: false,
         parallelIndex: 0
       })
@@ -361,7 +361,7 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
                 <span className="text-muted-foreground">{diff.stage}:</span>
                 <span className={cn(
                   "ml-1 font-mono",
-                  diff.ep1Ahead ? "text-blue-500" : "text-green-500"
+                  diff.ep1Ahead ? "text-[#DA05E2]" : "text-[#2C0FDF]"
                 )}>
                   {diff.ep1Ahead ? "EP1" : "EP2"} +{diff.difference.toFixed(1)}ms
                 </span>

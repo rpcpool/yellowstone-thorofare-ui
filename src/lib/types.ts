@@ -23,7 +23,7 @@ export interface EndpointInfo {
 }
 
 export interface EndpointSummary {
-  waiting_time: Percentiles;
+  first_shred_delay: Percentiles;
   download_time: Percentiles;
   replay_time: Percentiles;
   confirmation_time: Percentiles;
@@ -43,7 +43,7 @@ export interface SlotComparison {
 }
 
 export interface SlotDetail {
-  waiting_time_ms: number | null;
+  first_shred_delay_ms: number | null;
   transitions: Transition[];
   durations: StageDurations;
 }

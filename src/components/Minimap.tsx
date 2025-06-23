@@ -69,9 +69,9 @@ export function Minimap({ data, zoom, viewportOffset, onViewportChange, visibleS
     const otherStartTime = otherEndpoint.transitions[0]?.timestamp || baseTime
     
     // Draw waiting block if this endpoint was slower
-    if (endpoint.waiting_time_ms && endpoint.waiting_time_ms > 0) {
+    if (endpoint.first_shred_delay_ms && endpoint.first_shred_delay_ms > 0) {
       const waitX = (otherStartTime - baseTime) * PIXELS_PER_MS * minimapScale
-      const waitWidth = endpoint.waiting_time_ms * PIXELS_PER_MS * minimapScale
+      const waitWidth = endpoint.first_shred_delay_ms * PIXELS_PER_MS * minimapScale
       
       ctx.fillStyle = `rgba(156, 163, 175, ${opacity * 0.5})` // gray-400 with opacity
       ctx.fillRect(waitX, y, Math.max(waitWidth, 1), 3)
@@ -93,7 +93,6 @@ export function Minimap({ data, zoom, viewportOffset, onViewportChange, visibleS
     ctx.globalAlpha = opacity
     ctx.fillRect(x, y, Math.max(width, 1), 3)
     ctx.globalAlpha = 1
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [minimapScale, visibleStages])
 
   useEffect(() => {
@@ -120,10 +119,10 @@ export function Minimap({ data, zoom, viewportOffset, onViewportChange, visibleS
       const opacity = 0.8
 
       // EP1
-      drawSlotLine(ctx, slot.endpoint1, slot.endpoint2, firstTimestamp, y, '#3b82f6', opacity)
+      drawSlotLine(ctx, slot.endpoint1, slot.endpoint2, firstTimestamp, y, '#DA05E2', opacity)
       
       // EP2
-      drawSlotLine(ctx, slot.endpoint2, slot.endpoint1, firstTimestamp, y + 2, '#22c55e', opacity)
+      drawSlotLine(ctx, slot.endpoint2, slot.endpoint1, firstTimestamp, y + 2, '#2C0FDF', opacity)
     })
   }, [data, minimapScale, minimapWidth, drawSlotLine, firstTimestamp, visibleStages])
 
@@ -204,7 +203,7 @@ export function Minimap({ data, zoom, viewportOffset, onViewportChange, visibleS
           {/* Viewport indicator */}
           <div
             className={cn(
-              "absolute top-0 bottom-0 bg-primary/20 border-2 border-primary rounded transition-all",
+              "absolute top-0 bottom-0 bg-[#8424D1]/20 border-2 border-[#8424D1] rounded transition-all",
               isDragging ? "cursor-grabbing" : "cursor-grab"
             )}
             style={{
@@ -213,8 +212,8 @@ export function Minimap({ data, zoom, viewportOffset, onViewportChange, visibleS
               pointerEvents: 'none'
             }}
           >
-            <div className="absolute inset-0 bg-primary/10" />
-            <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px bg-primary/50" />
+            <div className="absolute inset-0 bg-[#8424D1]/10" />
+            <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px bg-[#8424D1]/50" />
           </div>
         </div>
       </div>

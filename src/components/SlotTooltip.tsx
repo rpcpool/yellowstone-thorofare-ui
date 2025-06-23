@@ -99,10 +99,10 @@ export function SlotTooltip({
     >
       <div>
         <h4 className="font-semibold text-sm text-foreground">Slot {slot} - {endpointName}</h4>
-        {endpoint.waiting_time_ms !== null && endpoint.waiting_time_ms > 0 && (
+        {endpoint.first_shred_delay_ms !== null && endpoint.first_shred_delay_ms > 0 && (
           <p className="text-xs text-muted-foreground">
-            Waiting: {formatDuration(endpoint.waiting_time_ms)}
-            {endpoint.waiting_time_ms < 1 && (
+            Waiting: {formatDuration(endpoint.first_shred_delay_ms)}
+            {endpoint.first_shred_delay_ms < 1 && (
               <span className="text-yellow-500 ml-1">(sub-millisecond)</span>
             )}
           </p>
