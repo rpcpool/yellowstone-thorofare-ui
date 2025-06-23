@@ -1,6 +1,16 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Upload, FileJson, Trash2, Database, AlertCircle, Clock, Activity, ChevronRight } from "lucide-react";
 import type { BenchmarkResult } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -16,6 +26,7 @@ interface BenchmarkDataManagerProps {
   onDataChange: (data: BenchmarkResult | null, id?: string) => void;
   currentData: BenchmarkResult | null;
   initialSelectedId?: string | null;
+  inSheet?: boolean;
 }
 
 const STORAGE_KEY = "yellowstone-benchmarks";
@@ -24,12 +35,14 @@ export function BenchmarkDataManager({
   onDataChange,
   currentData,
   initialSelectedId,
+  inSheet = false,
 }: BenchmarkDataManagerProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId || null);
   const [isHoveredBenchmark, setIsHoveredBenchmark] = useState<string | null>(null);
+  const [showClearAllDialog, setShowClearAllDialog] = useState(false);
 
   // Update selectedId when initialSelectedId changes
   useEffect(() => {
@@ -184,12 +197,11 @@ export function BenchmarkDataManager({
 
   // Clear all data
   const handleClearAll = () => {
-    if (window.confirm("Are you sure you want to clear all stored benchmarks?")) {
-      localStorage.removeItem(STORAGE_KEY);
-      setStoredBenchmarks([]);
-      setSelectedId(null);
-      onDataChange(null);
-    }
+    localStorage.removeItem(STORAGE_KEY);
+    setStoredBenchmarks([]);
+    setSelectedId(null);
+    onDataChange(null);
+    setShowClearAllDialog(false);
   };
 
   // Format relative time
@@ -221,7 +233,7 @@ export function BenchmarkDataManager({
   return (
     <div className={cn(
       "transition-all duration-300",
-      hasData ? "max-w-md" : "max-w-2xl mx-auto"
+      !inSheet && (hasData ? "max-w-md" : "max-w-2xl mx-auto")
     )}>
       <Card className="overflow-hidden">
         {/* Header */}
@@ -242,7 +254,7 @@ export function BenchmarkDataManager({
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={handleClearAll}
+                onClick={() => setShowClearAllDialog(true)}
                 className="text-destructive hover:text-destructive hover:bg-destructive/10"
               >
                 <Trash2 className="h-4 w-4 mr-2" />
@@ -431,6 +443,28 @@ export function BenchmarkDataManager({
           )}
         </div>
       </Card>
+
+      {/* Clear All Confirmation Dialog */}
+      <AlertDialog open={showClearAllDialog} onOpenChange={setShowClearAllDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete all {storedBenchmarks.length} stored benchmark{storedBenchmarks.length > 1 ? 's' : ''}.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleClearAll}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Clear All
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
