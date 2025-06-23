@@ -1,7 +1,7 @@
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import type { BenchmarkResult } from "@/lib/types"
-import { Database, Activity, Settings, FileJson, Clock, Zap, TrendingUp } from "lucide-react"
+import { Database, Activity, Settings, FileJson, Clock, Zap, TrendingUp, FolderOpen } from "lucide-react"
 import { useState } from "react"
 import { 
   Collapsible, 
@@ -15,7 +15,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog"
 import { BenchmarkDataManager } from "./BenchmarkDataManager"
 
@@ -25,6 +24,7 @@ interface BenchmarkHeaderProps {
   onBenchmarkChange: (data: BenchmarkResult | null, id?: string) => void
   selectedBenchmarkId?: string | null
   benchmarksCount?: number
+  onNameChange?: () => void
 }
 
 export function BenchmarkHeader({ 
@@ -32,7 +32,8 @@ export function BenchmarkHeader({
   currentBenchmarkName,
   onBenchmarkChange,
   selectedBenchmarkId,
-  benchmarksCount = 0
+  benchmarksCount = 0,
+  onNameChange
 }: BenchmarkHeaderProps) {
   const { metadata, endpoints, version, with_load, grpc_config, endpoint1_summary, endpoint2_summary } = data
   const [isConfigOpen, setIsConfigOpen] = useState(false)
@@ -95,54 +96,21 @@ export function BenchmarkHeader({
             <p className="text-sm text-muted-foreground">gRPC Endpoint Benchmark Tool</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="text-right space-y-1">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Database className="h-4 w-4" />
-              <span>Version: {version}</span>
-            </div>
-            {with_load && (
-              <Badge variant="secondary" className="text-xs">
-                <Activity className="h-3 w-3 mr-1" />
-                Load Testing Mode
-              </Badge>
-            )}
+        <div className="text-right space-y-1">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Database className="h-4 w-4" />
+            <span>Version: {version}</span>
           </div>
-
-          {/* Data manager toggle button */}
-          <Dialog open={isDataManagerOpen} onOpenChange={setIsDataManagerOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" size="sm" className="gap-2">
-                <Database className="h-4 w-4" />
-                <span className="hidden sm:inline">Benchmarks</span>
-                {benchmarksCount > 0 && (
-                  <span className="text-xs bg-muted px-1.5 py-0.5 rounded-full">
-                    {benchmarksCount}
-                  </span>
-                )}
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
-              <DialogHeader>
-                <DialogTitle>Benchmark Manager</DialogTitle>
-                <DialogDescription>
-                  Upload new benchmarks or switch between existing ones
-                </DialogDescription>
-              </DialogHeader>
-              <div className="flex-1 overflow-y-auto">
-                <BenchmarkDataManager
-                  onDataChange={handleBenchmarkChangeInternal}
-                  currentData={data}
-                  initialSelectedId={selectedBenchmarkId}
-                  inModal={true}
-                />
-              </div>
-            </DialogContent>
-          </Dialog>
+          {with_load && (
+            <Badge variant="secondary" className="text-xs">
+              <Activity className="h-3 w-3 mr-1" />
+              Load Testing Mode
+            </Badge>
+          )}
         </div>
       </div>
       
-      {/* Current benchmark info */}
+      {/* Current benchmark info with integrated button */}
       {currentBenchmarkName && (
         <Card className="p-4 bg-gradient-to-r from-[#DA05E2]/5 to-[#2C0FDF]/5 border-[#8424D1]/20">
           <div className="flex items-center justify-between flex-wrap gap-3">
@@ -154,6 +122,23 @@ export function BenchmarkHeader({
                 <p className="text-xs text-muted-foreground">Current Benchmark</p>
                 <p className="font-semibold">{currentBenchmarkName}</p>
               </div>
+              
+              {/* Obvious button to switch benchmarks */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsDataManagerOpen(true)}
+                className="gap-2 border-[#8424D1]/30 hover:border-[#8424D1]/50"
+              >
+                <FolderOpen className="h-4 w-4" />
+                <span className="hidden sm:inline">View All</span>
+                <span className="sm:hidden">Change</span>
+                {benchmarksCount > 1 && (
+                  <span className="text-xs bg-muted px-1.5 py-0.5 rounded-full">
+                    {benchmarksCount}
+                  </span>
+                )}
+              </Button>
             </div>
             
             <div className="flex items-center gap-2 sm:gap-4 text-sm flex-wrap">
@@ -183,6 +168,27 @@ export function BenchmarkHeader({
           </div>
         </Card>
       )}
+
+      {/* Data manager dialog */}
+      <Dialog open={isDataManagerOpen} onOpenChange={setIsDataManagerOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Benchmark Manager</DialogTitle>
+            <DialogDescription>
+              Upload new benchmarks, switch between existing ones, or rename your benchmarks
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto">
+            <BenchmarkDataManager
+              onDataChange={handleBenchmarkChangeInternal}
+              currentData={data}
+              initialSelectedId={selectedBenchmarkId}
+              inModal={true}
+              onNameChange={onNameChange}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
       
       {/* Metadata Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

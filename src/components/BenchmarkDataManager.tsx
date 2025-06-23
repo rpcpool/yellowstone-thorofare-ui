@@ -29,16 +29,18 @@ interface BenchmarkDataManagerProps {
   initialSelectedId?: string | null;
   inSheet?: boolean;
   inModal?: boolean;
+  onNameChange?: () => void; 
 }
 
 const STORAGE_KEY = "yellowstone-benchmarks";
 
 export function BenchmarkDataManager({
-  onDataChange,
-  currentData,
-  initialSelectedId,
-  inSheet = false,
-  inModal = false,
+    onDataChange,
+    currentData,
+    initialSelectedId,
+    inSheet = false,
+    inModal = false,
+    onNameChange,
 }: BenchmarkDataManagerProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -85,16 +87,22 @@ export function BenchmarkDataManager({
     setEditingName(benchmark.name);
   };
 
+
   const handleSaveRename = () => {
-    if (!editingId || !editingName.trim()) return;
-    
-    const updated = storedBenchmarks.map(b => 
-      b.id === editingId ? { ...b, name: editingName.trim() } : b
-    );
-    saveToStorage(updated);
-    setEditingId(null);
-    setEditingName("");
-  };
+  if (!editingId || !editingName.trim()) return;
+  
+  const updated = storedBenchmarks.map(b => 
+    b.id === editingId ? { ...b, name: editingName.trim() } : b
+  );
+  saveToStorage(updated);
+  setEditingId(null);
+  setEditingName("");
+  
+  // Notify parent if this was the selected benchmark
+  if (editingId === selectedId && onNameChange) {
+    onNameChange();
+  }
+};
 
   const handleCancelRename = () => {
     setEditingId(null);

@@ -10,6 +10,7 @@ import type { BenchmarkResult } from "./lib/types"
 function App() {
   const [benchmarkData, setBenchmarkData] = useState<BenchmarkResult | null>(null)
   const [selectedBenchmarkId, setSelectedBenchmarkId] = useState<string | null>(null)
+  const [refreshKey, setRefreshKey] = useState(0) // Add this to force refresh
   const [zoom, setZoom] = useState(0.5)
   const [viewportOffset, setViewportOffset] = useState(0)
   const [visibleStages, setVisibleStages] = useState<StageVisibility>({
@@ -105,9 +106,10 @@ function App() {
   const handleBenchmarkChange = (data: BenchmarkResult | null, id?: string) => {
     setBenchmarkData(data)
     setSelectedBenchmarkId(id || null)
+    setRefreshKey(prev => prev + 1) // Force refresh to update name
   }
 
-  // Get current benchmark name
+  // Get current benchmark name (with refresh key dependency)
   const getCurrentBenchmarkName = () => {
     if (!selectedBenchmarkId) return null
     try {
@@ -199,6 +201,7 @@ function App() {
               onDataChange={handleBenchmarkChange}
               currentData={benchmarkData}
               initialSelectedId={selectedBenchmarkId}
+              onNameChange={() => setRefreshKey(prev => prev + 1)}
             />
             
             <div className="text-center text-sm text-muted-foreground max-w-lg">
@@ -212,11 +215,13 @@ function App() {
           // Show benchmark visualization when data is loaded
           <div className="w-full space-y-4 sm:space-y-6">
             <BenchmarkHeader 
+              key={refreshKey} // Force re-render when name changes
               data={benchmarkData} 
               currentBenchmarkName={getCurrentBenchmarkName()}
               onBenchmarkChange={handleBenchmarkChange}
               selectedBenchmarkId={selectedBenchmarkId}
               benchmarksCount={getBenchmarksCount()}
+              onNameChange={() => setRefreshKey(prev => prev + 1)}
             />
             
             <BenchmarkStatistics data={benchmarkData} />
