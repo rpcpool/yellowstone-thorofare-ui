@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Upload, FileJson, Trash2, Database, AlertCircle, Clock, Activity, ChevronRight } from "lucide-react";
@@ -13,8 +13,9 @@ interface StoredBenchmark {
 }
 
 interface BenchmarkDataManagerProps {
-  onDataChange: (data: BenchmarkResult | null) => void;
+  onDataChange: (data: BenchmarkResult | null, id?: string) => void;
   currentData: BenchmarkResult | null;
+  initialSelectedId?: string | null;
 }
 
 const STORAGE_KEY = "yellowstone-benchmarks";
@@ -22,12 +23,18 @@ const STORAGE_KEY = "yellowstone-benchmarks";
 export function BenchmarkDataManager({
   onDataChange,
   currentData,
+  initialSelectedId,
 }: BenchmarkDataManagerProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId || null);
   const [isHoveredBenchmark, setIsHoveredBenchmark] = useState<string | null>(null);
+
+  // Update selectedId when initialSelectedId changes
+  useEffect(() => {
+    setSelectedId(initialSelectedId || null);
+  }, [initialSelectedId]);
 
   // Load stored benchmarks from localStorage
   const getStoredBenchmarks = (): StoredBenchmark[] => {
@@ -104,9 +111,9 @@ export function BenchmarkDataManager({
           const updated = [...storedBenchmarks, newBenchmark];
           saveToStorage(updated);
 
-          // Set as current data
+          // Set as current data - the ID is now selected
           setSelectedId(id);
-          onDataChange(data);
+          onDataChange(data, id);
         } catch {
           setError("Failed to parse JSON file");
         }
@@ -158,7 +165,7 @@ export function BenchmarkDataManager({
     const benchmark = storedBenchmarks.find((b) => b.id === id);
     if (benchmark) {
       setSelectedId(id);
-      onDataChange(benchmark.data);
+      onDataChange(benchmark.data, id);
     }
   };
 

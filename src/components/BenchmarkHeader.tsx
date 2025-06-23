@@ -1,7 +1,7 @@
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import type { BenchmarkResult } from "@/lib/types"
-import { Database, Activity, Settings } from "lucide-react"
+import { Database, Activity, Settings, FileJson, Clock, Zap, TrendingUp } from "lucide-react"
 import { useState } from "react"
 import { 
   Collapsible, 
@@ -12,10 +12,11 @@ import { Button } from "@/components/ui/button"
 
 interface BenchmarkHeaderProps {
   data: BenchmarkResult
+  currentBenchmarkName?: string | null
 }
 
-export function BenchmarkHeader({ data }: BenchmarkHeaderProps) {
-  const { metadata, endpoints, version, with_load, grpc_config } = data
+export function BenchmarkHeader({ data, currentBenchmarkName }: BenchmarkHeaderProps) {
+  const { metadata, endpoints, version, with_load, grpc_config, endpoint1_summary, endpoint2_summary } = data
   const [isConfigOpen, setIsConfigOpen] = useState(false)
   
   const formatDuration = (ms: number) => {
@@ -23,18 +24,45 @@ export function BenchmarkHeader({ data }: BenchmarkHeaderProps) {
     return `${(ms / 1000).toFixed(2)}s`
   }
   
+  // Calculate which endpoint was generally faster
+  const getFasterEndpoint = () => {
+    const ep1Faster = [
+      endpoint1_summary.first_shred_delay.p50 < endpoint2_summary.first_shred_delay.p50,
+      endpoint1_summary.download_time.p50 < endpoint2_summary.download_time.p50,
+      endpoint1_summary.replay_time.p50 < endpoint2_summary.replay_time.p50,
+      endpoint1_summary.processing_delay.p50 < endpoint2_summary.processing_delay.p50,
+    ].filter(Boolean).length
+    
+    const ep2Faster = 4 - ep1Faster
+    
+    if (ep1Faster > ep2Faster) return { index: 0, name: getShortName(endpoints[0].endpoint) }
+    if (ep2Faster > ep1Faster) return { index: 1, name: getShortName(endpoints[1].endpoint) }
+    return null
+  }
+  
+  const getShortName = (endpoint: string) => {
+    try {
+      const url = new URL(endpoint)
+      return url.hostname.split('.')[0]
+    } catch {
+      return endpoint.slice(0, 20)
+    }
+  }
+  
+  const fasterEndpoint = getFasterEndpoint()
+  
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 flex-1">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-2">
           {/* Logo - update the src path to match your file location */}
           <img 
             src="/logo.svg" 
             alt="Triton One" 
-            className="h-28 w-auto"
+            className="h-20 sm:h-24 lg:h-28 w-auto"
           />
           <div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-[#DA05E2] to-[#2C0FDF] bg-clip-text text-transparent">
+            <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-[#DA05E2] to-[#2C0FDF] bg-clip-text text-transparent">
               Yellowstone Thorofare
             </h1>
             <p className="text-sm text-muted-foreground">gRPC Endpoint Benchmark Tool</p>
@@ -53,6 +81,48 @@ export function BenchmarkHeader({ data }: BenchmarkHeaderProps) {
           )}
         </div>
       </div>
+      
+      {/* Current benchmark info */}
+      {currentBenchmarkName && (
+        <Card className="p-4 bg-gradient-to-r from-[#DA05E2]/5 to-[#2C0FDF]/5 border-[#8424D1]/20">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-background rounded-lg">
+                <FileJson className="h-5 w-5 text-[#8424D1]" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Current Benchmark</p>
+                <p className="font-semibold">{currentBenchmarkName}</p>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-2 sm:gap-4 text-sm flex-wrap">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Clock className="h-4 w-4" />
+                <span className="hidden sm:inline">{new Date(metadata.benchmark_start_time).toLocaleDateString()}</span>
+                <span className="sm:hidden">{new Date(metadata.benchmark_start_time).toLocaleDateString('en', { month: 'short', day: 'numeric' })}</span>
+              </div>
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Zap className="h-4 w-4" />
+                <span>{formatDuration(metadata.duration_ms)}</span>
+              </div>
+              <Badge variant="secondary" className="text-xs">
+                {metadata.compared_slots} slots
+              </Badge>
+              {fasterEndpoint && (
+                <Badge 
+                  variant="outline" 
+                  className="text-xs border-green-600/50 text-green-600 flex items-center gap-1"
+                >
+                  <TrendingUp className="h-3 w-3" />
+                  <span className="hidden sm:inline">{fasterEndpoint.name} faster overall</span>
+                  <span className="sm:hidden">{fasterEndpoint.name} faster</span>
+                </Badge>
+              )}
+            </div>
+          </div>
+        </Card>
+      )}
       
       {/* Metadata Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

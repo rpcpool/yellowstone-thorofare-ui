@@ -9,6 +9,7 @@ import type { BenchmarkResult } from "./lib/types"
 
 function App() {
   const [benchmarkData, setBenchmarkData] = useState<BenchmarkResult | null>(null)
+  const [selectedBenchmarkId, setSelectedBenchmarkId] = useState<string | null>(null)
   const [zoom, setZoom] = useState(0.5)
   const [viewportOffset, setViewportOffset] = useState(0)
   const [visibleStages, setVisibleStages] = useState<StageVisibility>({
@@ -100,6 +101,34 @@ function App() {
     setViewportOffset(0)
   }
   
+  // Handler for benchmark changes
+  const handleBenchmarkChange = (data: BenchmarkResult | null, id?: string) => {
+    setBenchmarkData(data)
+    setSelectedBenchmarkId(id || null)
+  }
+
+  // Get current benchmark name
+  const getCurrentBenchmarkName = () => {
+    if (!selectedBenchmarkId) return null
+    try {
+      const stored = localStorage.getItem("yellowstone-benchmarks")
+      if (stored) {
+        const benchmarks = JSON.parse(stored)
+        const current = benchmarks.find((b: any) => b.id === selectedBenchmarkId)
+        return current?.name || null
+      }
+    } catch {
+      return null
+    }
+    return null
+  }
+
+  // Reset zoom when data changes
+  useEffect(() => {
+    setZoom(0.5)
+    setViewportOffset(0)
+  }, [benchmarkData])
+  
   // Auto-fit when data changes or visible stages change
   useEffect(() => {
     if (benchmarkData) {
@@ -119,12 +148,6 @@ function App() {
     return () => window.removeEventListener('resize', handleResize)
   }, [benchmarkData, visibleStages]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Reset zoom when data changes
-  useEffect(() => {
-    setZoom(0.5)
-    setViewportOffset(0)
-  }, [benchmarkData])
-
   // Load initial data from localStorage if available
   useEffect(() => {
     try {
@@ -135,6 +158,7 @@ function App() {
           // Load the most recent benchmark
           const mostRecent = benchmarks.sort((a: any, b: any) => b.timestamp - a.timestamp)[0]
           setBenchmarkData(mostRecent.data)
+          setSelectedBenchmarkId(mostRecent.id)
         }
       }
     } catch (error) {
@@ -158,8 +182,9 @@ function App() {
             </div>
             
             <BenchmarkDataManager
-              onDataChange={setBenchmarkData}
+              onDataChange={handleBenchmarkChange}
               currentData={benchmarkData}
+              initialSelectedId={selectedBenchmarkId}
             />
             
             <div className="text-center text-sm text-muted-foreground max-w-lg">
@@ -173,13 +198,17 @@ function App() {
           // Show benchmark visualization when data is loaded
           <div className="w-full space-y-4 sm:space-y-6">
             <div className="flex justify-between items-start gap-4">
-              <BenchmarkHeader data={benchmarkData} />
+              <BenchmarkHeader 
+                data={benchmarkData} 
+                currentBenchmarkName={getCurrentBenchmarkName()}
+              />
               
               {/* Data manager in sidebar mode */}
               <div className="hidden xl:block">
                 <BenchmarkDataManager
-                  onDataChange={setBenchmarkData}
+                  onDataChange={handleBenchmarkChange}
                   currentData={benchmarkData}
+                  initialSelectedId={selectedBenchmarkId}
                 />
               </div>
             </div>
@@ -187,8 +216,9 @@ function App() {
             {/* Mobile/tablet data manager */}
             <div className="xl:hidden">
               <BenchmarkDataManager
-                onDataChange={setBenchmarkData}
+                onDataChange={handleBenchmarkChange}
                 currentData={benchmarkData}
+                initialSelectedId={selectedBenchmarkId}
               />
             </div>
             
