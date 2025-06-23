@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { parseEndpointName } from "@/lib/endpoint-utils"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -256,13 +257,8 @@ export function BenchmarkDataManager({
 
   // Get endpoint shortname
   const getEndpointShortName = (endpoint: string) => {
-    try {
-      const url = new URL(endpoint);
-      return url.hostname.split('.')[0];
-    } catch {
-      return endpoint.slice(0, 20);
-    }
-  };
+    return parseEndpointName(endpoint);
+    };
 
   const hasData = currentData !== null || storedBenchmarks.length > 0;
 

@@ -9,6 +9,7 @@ import {
   CollapsibleTrigger 
 } from "@/components/ui/collapsible"
 import { Button } from "@/components/ui/button"
+import { parseVersion, formatVersionDisplay, parseEndpointName } from "@/lib/endpoint-utils"
 import {
   Dialog,
   DialogContent,
@@ -60,13 +61,9 @@ export function BenchmarkHeader({
     return null
   }
   
+
   const getShortName = (endpoint: string) => {
-    try {
-      const url = new URL(endpoint)
-      return url.hostname.split('.')[0]
-    } catch {
-      return endpoint.slice(0, 20)
-    }
+    return parseEndpointName(endpoint);
   }
   
   const fasterEndpoint = getFasterEndpoint()
@@ -218,45 +215,53 @@ export function BenchmarkHeader({
       
       {/* Endpoint Cards */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        {endpoints.map((endpoint, idx) => (
-          <Card key={idx} className="p-4 border-border/50 hover:border-[#8424D1]/50 transition-colors">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <div className={`w-3 h-3 rounded-full ${
-                  idx === 0 ? 'bg-[#DA05E2]' : 'bg-[#2C0FDF]'
-                }`} />
-                <h3 className="font-semibold text-lg">
-                  Endpoint {idx + 1}
-                </h3>
+        {endpoints.map((endpoint, idx) => {
+          const versionInfo = parseVersion(endpoint.plugin_version);
+          return (
+            <Card key={idx} className="p-4 border-border/50 hover:border-[#8424D1]/50 transition-colors">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <div className={`w-3 h-3 rounded-full ${
+                    idx === 0 ? 'bg-[#DA05E2]' : 'bg-[#2C0FDF]'
+                  }`} />
+                  <h3 className="font-semibold text-lg">
+                    Endpoint {idx + 1}
+                  </h3>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-xs">
+                    {endpoint.plugin_type}
+                  </Badge>
+                  <Badge variant="secondary" className="text-xs">
+                    {formatVersionDisplay(endpoint.plugin_version)}
+                  </Badge>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-xs">
-                  {endpoint.plugin_type}
-                </Badge>
-                <Badge variant="secondary" className="text-xs">
-                  v{endpoint.plugin_version}
-                </Badge>
+              <p className="text-sm text-muted-foreground break-all font-mono mb-1">
+                {parseEndpointName(endpoint.endpoint)}
+              </p>
+              {versionInfo.hostname && (
+                <p className="text-xs text-muted-foreground mb-2">
+                  Host: {versionInfo.hostname}
+                </p>
+              )}
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <p className="text-xs text-muted-foreground">Avg Ping</p>
+                  <p className="font-semibold">{endpoint.avg_ping_ms.toFixed(1)}ms</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Updates</p>
+                  <p className="font-semibold">{endpoint.total_updates.toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Unique Slots</p>
+                  <p className="font-semibold">{endpoint.unique_slots}</p>
+                </div>
               </div>
-            </div>
-            <p className="text-sm text-muted-foreground break-all font-mono mb-3">
-              {endpoint.endpoint}
-            </p>
-            <div className="grid grid-cols-3 gap-2">
-              <div>
-                <p className="text-xs text-muted-foreground">Avg Ping</p>
-                <p className="font-semibold">{endpoint.avg_ping_ms.toFixed(1)}ms</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Updates</p>
-                <p className="font-semibold">{endpoint.total_updates.toLocaleString()}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Unique Slots</p>
-                <p className="font-semibold">{endpoint.unique_slots}</p>
-              </div>
-            </div>
-          </Card>
-        ))}
+            </Card>
+          );
+        })}
       </div>
 
       {/* gRPC Configuration (Collapsible) */}

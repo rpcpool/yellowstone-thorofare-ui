@@ -2,6 +2,7 @@ import { Card } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import type { BenchmarkResult } from "@/lib/types"
 import { Clock, Zap, AlertCircle, Info } from "lucide-react"
+import { parseEndpointName } from "@/lib/endpoint-utils"
 import {
   Tooltip,
   TooltipContent,
@@ -219,15 +220,9 @@ export function BenchmarkStatistics({ data }: BenchmarkStatisticsProps) {
     finalization: "Finalization"
   }
 
-  // Helper to get short endpoint name
-  const getShortEndpointName = (idx: number) => {
+  const getEndpointShortName = (idx: number) => {
     const endpoint = data.endpoints[idx].endpoint
-    try {
-      const url = new URL(endpoint)
-      return url.hostname.split('.')[0] // Get first part of hostname
-    } catch {
-      return `EP${idx + 1}`
-    }
+    return parseEndpointName(endpoint)
   }
 
   return (
@@ -253,11 +248,11 @@ export function BenchmarkStatistics({ data }: BenchmarkStatisticsProps) {
             <p className="text-sm text-muted-foreground">First Shred Reception</p>
             <div className="space-y-1">
               <div className="flex justify-between text-sm">
-                <span style={{ color: EP1_COLOR }}>{getShortEndpointName(0)} First:</span>
+                <span style={{ color: EP1_COLOR }}>{getEndpointShortName(0)} First:</span>
                 <span className="font-mono">{formatPercentage(firstSeenStats.ep1Percentage)}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span style={{ color: EP2_COLOR }}>{getShortEndpointName(1)} First:</span>
+                <span style={{ color: EP2_COLOR }}>{getEndpointShortName(1)} First:</span>
                 <span className="font-mono">{formatPercentage(firstSeenStats.ep2Percentage)}</span>
               </div>
               <div className="flex justify-between text-sm">
@@ -283,11 +278,11 @@ export function BenchmarkStatistics({ data }: BenchmarkStatisticsProps) {
             <p className="text-sm text-muted-foreground">First Shred Delay</p>
             <div className="space-y-1">
               <div className="flex justify-between text-sm">
-                <span style={{ color: EP1_COLOR }}>{getShortEndpointName(0)}:</span>
+                <span style={{ color: EP1_COLOR }}>{getEndpointShortName(0)}:</span>
                 <span className="font-mono">{formatDuration(firstSeenStats.avgDelayTime.ep1)}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span style={{ color: EP2_COLOR }}>{getShortEndpointName(1)}:</span>
+                <span style={{ color: EP2_COLOR }}>{getEndpointShortName(1)}:</span>
                 <span className="font-mono">{formatDuration(firstSeenStats.avgDelayTime.ep2)}</span>
               </div>
               <p className="text-xs text-muted-foreground mt-1">
@@ -354,7 +349,7 @@ export function BenchmarkStatistics({ data }: BenchmarkStatisticsProps) {
                     <div className="w-2 h-2 rounded-full" style={{ backgroundColor: EP1_COLOR }} />
                     <span className="text-xs font-semibold" style={{ color: EP1_COLOR }}>
                       {data.endpoints[0].endpoint.length > 30 
-                        ? getShortEndpointName(0) 
+                        ? getEndpointShortName(0) 
                         : data.endpoints[0].endpoint}
                     </span>
                   </div>
@@ -381,7 +376,7 @@ export function BenchmarkStatistics({ data }: BenchmarkStatisticsProps) {
                     <div className="w-2 h-2 rounded-full" style={{ backgroundColor: EP2_COLOR }} />
                     <span className="text-xs font-semibold" style={{ color: EP2_COLOR }}>
                       {data.endpoints[1].endpoint.length > 30 
-                        ? getShortEndpointName(1) 
+                        ? getEndpointShortName(1) 
                         : data.endpoints[1].endpoint}
                     </span>
                   </div>
@@ -414,7 +409,7 @@ export function BenchmarkStatistics({ data }: BenchmarkStatisticsProps) {
                             className="ml-1 text-[10px]"
                             style={{ color: stats.diff.p50.faster === 'ep1' ? EP1_COLOR : EP2_COLOR }}
                           >
-                            ({getShortEndpointName(stats.diff.p50.faster === 'ep1' ? 0 : 1)} faster)
+                            ({getEndpointShortName(stats.diff.p50.faster === 'ep1' ? 0 : 1)} faster)
                           </span>
                         )}
                       </span>
@@ -428,7 +423,7 @@ export function BenchmarkStatistics({ data }: BenchmarkStatisticsProps) {
                             className="ml-1 text-[10px]"
                             style={{ color: stats.diff.p90.faster === 'ep1' ? EP1_COLOR : EP2_COLOR }}
                           >
-                            ({getShortEndpointName(stats.diff.p90.faster === 'ep1' ? 0 : 1)} faster)
+                            ({getEndpointShortName(stats.diff.p90.faster === 'ep1' ? 0 : 1)} faster)
                           </span>
                         )}
                       </span>
@@ -442,7 +437,7 @@ export function BenchmarkStatistics({ data }: BenchmarkStatisticsProps) {
                             className="ml-1 text-[10px]"
                             style={{ color: stats.diff.p99.faster === 'ep1' ? EP1_COLOR : EP2_COLOR }}
                           >
-                            ({getShortEndpointName(stats.diff.p99.faster === 'ep1' ? 0 : 1)} faster)
+                            ({getEndpointShortName(stats.diff.p99.faster === 'ep1' ? 0 : 1)} faster)
                           </span>
                         )}
                       </span>

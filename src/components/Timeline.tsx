@@ -1,6 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from "react"
 import type { BenchmarkResult, SlotDetail, SlotComparison } from "@/lib/types"
 import { STAGE_COLORS, STAGE_LABELS, ENDPOINT_COLORS, PIXELS_PER_MS, STAGE_HEIGHT, STAGE_SPACING } from "@/lib/constants"
+import { parseEndpointName } from "@/lib/endpoint-utils"
 import { cn } from "@/lib/utils"
 import { SlotTooltip } from "./SlotTooltip"
 import type { StageVisibility } from "./TimelineControls"
@@ -613,7 +614,7 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
                   slot.endpoint2,
                   firstTimestamp,
                   pixelsPerMs,
-                  'EP1',
+                  parseEndpointName(data.endpoints[0].endpoint),
                   slot.slot,
                   0
                 )}
@@ -663,7 +664,7 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
                   slot.endpoint1,
                   firstTimestamp,
                   pixelsPerMs,
-                  'EP2',
+                  parseEndpointName(data.endpoints[1].endpoint),
                   slot.slot,
                   0
                 )}
