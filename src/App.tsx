@@ -6,23 +6,12 @@ import { BenchmarkStatistics } from "@/components/BenchmarkStatistics"
 import { BenchmarkDataManager } from "@/components/BenchmarkDataManager"
 import { PIXELS_PER_MS } from "@/lib/constants"
 import type { BenchmarkResult } from "./lib/types"
-import { Button } from "@/components/ui/button"
-import { Database } from "lucide-react"
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet"
 
 function App() {
   const [benchmarkData, setBenchmarkData] = useState<BenchmarkResult | null>(null)
   const [selectedBenchmarkId, setSelectedBenchmarkId] = useState<string | null>(null)
   const [zoom, setZoom] = useState(0.5)
   const [viewportOffset, setViewportOffset] = useState(0)
-  const [isDataManagerOpen, setIsDataManagerOpen] = useState(false)
   const [visibleStages, setVisibleStages] = useState<StageVisibility>({
     download: true,
     replay: true,
@@ -116,10 +105,6 @@ function App() {
   const handleBenchmarkChange = (data: BenchmarkResult | null, id?: string) => {
     setBenchmarkData(data)
     setSelectedBenchmarkId(id || null)
-    // Close the data manager sheet when a benchmark is selected
-    if (data) {
-      setIsDataManagerOpen(false)
-    }
   }
 
   // Get current benchmark name
@@ -226,43 +211,13 @@ function App() {
         ) : (
           // Show benchmark visualization when data is loaded
           <div className="w-full space-y-4 sm:space-y-6">
-            <div className="flex justify-between items-start gap-4">
-              <BenchmarkHeader 
-                data={benchmarkData} 
-                currentBenchmarkName={getCurrentBenchmarkName()}
-              />
-              
-              {/* Data manager toggle button */}
-              <Sheet open={isDataManagerOpen} onOpenChange={setIsDataManagerOpen}>
-                <SheetTrigger asChild>
-                  <Button variant="outline" size="sm" className="gap-2">
-                    <Database className="h-4 w-4" />
-                    <span className="hidden sm:inline">Benchmarks</span>
-                    {getBenchmarksCount() > 0 && (
-                      <span className="text-xs bg-muted px-1.5 py-0.5 rounded-full">
-                        {getBenchmarksCount()}
-                      </span>
-                    )}
-                  </Button>
-                </SheetTrigger>
-                <SheetContent className="w-full sm:max-w-xl">
-                  <SheetHeader>
-                    <SheetTitle>Benchmark Manager</SheetTitle>
-                    <SheetDescription>
-                      Upload new benchmarks or switch between existing ones
-                    </SheetDescription>
-                  </SheetHeader>
-                  <div className="mt-6">
-                    <BenchmarkDataManager
-                      onDataChange={handleBenchmarkChange}
-                      currentData={benchmarkData}
-                      initialSelectedId={selectedBenchmarkId}
-                      inSheet={true}
-                    />
-                  </div>
-                </SheetContent>
-              </Sheet>
-            </div>
+            <BenchmarkHeader 
+              data={benchmarkData} 
+              currentBenchmarkName={getCurrentBenchmarkName()}
+              onBenchmarkChange={handleBenchmarkChange}
+              selectedBenchmarkId={selectedBenchmarkId}
+              benchmarksCount={getBenchmarksCount()}
+            />
             
             <BenchmarkStatistics data={benchmarkData} />
             

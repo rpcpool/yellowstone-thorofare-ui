@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -11,7 +12,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Upload, FileJson, Trash2, Database, AlertCircle, Clock, Activity, ChevronRight } from "lucide-react";
+import { Upload, FileJson, Trash2, Database, AlertCircle, Clock, Activity, ChevronRight, Pencil, Check, X } from "lucide-react";
 import type { BenchmarkResult } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -27,6 +28,7 @@ interface BenchmarkDataManagerProps {
   currentData: BenchmarkResult | null;
   initialSelectedId?: string | null;
   inSheet?: boolean;
+  inModal?: boolean;
 }
 
 const STORAGE_KEY = "yellowstone-benchmarks";
@@ -36,6 +38,7 @@ export function BenchmarkDataManager({
   currentData,
   initialSelectedId,
   inSheet = false,
+  inModal = false,
 }: BenchmarkDataManagerProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -43,6 +46,8 @@ export function BenchmarkDataManager({
   const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId || null);
   const [isHoveredBenchmark, setIsHoveredBenchmark] = useState<string | null>(null);
   const [showClearAllDialog, setShowClearAllDialog] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState("");
 
   // Update selectedId when initialSelectedId changes
   useEffect(() => {
@@ -71,6 +76,29 @@ export function BenchmarkDataManager({
     } catch {
       setError("Failed to save to storage. Storage might be full.");
     }
+  };
+
+  // Handle rename
+  const handleStartRename = (benchmark: StoredBenchmark, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingId(benchmark.id);
+    setEditingName(benchmark.name);
+  };
+
+  const handleSaveRename = () => {
+    if (!editingId || !editingName.trim()) return;
+    
+    const updated = storedBenchmarks.map(b => 
+      b.id === editingId ? { ...b, name: editingName.trim() } : b
+    );
+    saveToStorage(updated);
+    setEditingId(null);
+    setEditingName("");
+  };
+
+  const handleCancelRename = () => {
+    setEditingId(null);
+    setEditingName("");
   };
 
   // Validate benchmark data structure
@@ -233,7 +261,7 @@ export function BenchmarkDataManager({
   return (
     <div className={cn(
       "transition-all duration-300",
-      !inSheet && (hasData ? "max-w-md" : "max-w-2xl mx-auto")
+      !inSheet && !inModal && (hasData ? "max-w-md" : "max-w-2xl mx-auto")
     )}>
       <Card className="overflow-hidden">
         {/* Header */}
@@ -338,19 +366,20 @@ export function BenchmarkDataManager({
                   .map((benchmark) => {
                     const isSelected = selectedId === benchmark.id;
                     const isHovered = isHoveredBenchmark === benchmark.id;
+                    const isEditing = editingId === benchmark.id;
                     
                     return (
                       <div
                         key={benchmark.id}
-                        onClick={() => handleSelectBenchmark(benchmark.id)}
+                        onClick={() => !isEditing && handleSelectBenchmark(benchmark.id)}
                         onMouseEnter={() => setIsHoveredBenchmark(benchmark.id)}
                         onMouseLeave={() => setIsHoveredBenchmark(null)}
                         className={cn(
-                          "group relative p-4 rounded-lg border cursor-pointer transition-all",
+                          "group relative p-4 rounded-lg border transition-all",
                           isSelected 
                             ? "border-primary bg-primary/5 shadow-sm" 
                             : "border-border hover:border-primary/50 hover:bg-accent/50",
-                          "hover:shadow-md"
+                          !isEditing && "cursor-pointer hover:shadow-md"
                         )}
                       >
                         <div className="flex items-start justify-between gap-3">
@@ -362,55 +391,114 @@ export function BenchmarkDataManager({
                             
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
-                                <p className={cn(
-                                  "font-medium truncate",
-                                  isSelected && "text-primary"
-                                )}>
-                                  {benchmark.name}
-                                </p>
-                                {isSelected && (
-                                  <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded-full">
-                                    Active
-                                  </span>
+                                {isEditing ? (
+                                  <div className="flex items-center gap-2 flex-1">
+                                    <Input
+                                      value={editingName}
+                                      onChange={(e) => setEditingName(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                          handleSaveRename();
+                                        } else if (e.key === 'Escape') {
+                                          handleCancelRename();
+                                        }
+                                      }}
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="h-7 text-sm"
+                                      autoFocus
+                                    />
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      className="h-6 w-6"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleSaveRename();
+                                      }}
+                                    >
+                                      <Check className="h-3 w-3" />
+                                    </Button>
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      className="h-6 w-6"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleCancelRename();
+                                      }}
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <p className={cn(
+                                      "font-medium truncate",
+                                      isSelected && "text-primary"
+                                    )}>
+                                      {benchmark.name}
+                                    </p>
+                                    {isSelected && (
+                                      <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded-full">
+                                        Active
+                                      </span>
+                                    )}
+                                  </>
                                 )}
                               </div>
                               
-                              <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
-                                <span className="flex items-center gap-1">
-                                  <Clock className="h-3 w-3" />
-                                  {formatRelativeTime(benchmark.timestamp)}
-                                </span>
-                                <span className="flex items-center gap-1">
-                                  <Activity className="h-3 w-3" />
-                                  {benchmark.data.metadata.compared_slots} slots
-                                </span>
-                              </div>
-                              
-                              <div className="mt-2 text-xs">
-                                <span className="text-muted-foreground">
-                                  {getEndpointShortName(benchmark.data.endpoints[0].endpoint)} vs {getEndpointShortName(benchmark.data.endpoints[1].endpoint)}
-                                </span>
-                              </div>
+                              {!isEditing && (
+                                <>
+                                  <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
+                                    <span className="flex items-center gap-1">
+                                      <Clock className="h-3 w-3" />
+                                      {formatRelativeTime(benchmark.timestamp)}
+                                    </span>
+                                    <span className="flex items-center gap-1">
+                                      <Activity className="h-3 w-3" />
+                                      {benchmark.data.metadata.compared_slots} slots
+                                    </span>
+                                  </div>
+                                  
+                                  <div className="mt-2 text-xs">
+                                    <span className="text-muted-foreground">
+                                      {getEndpointShortName(benchmark.data.endpoints[0].endpoint)} vs {getEndpointShortName(benchmark.data.endpoints[1].endpoint)}
+                                    </span>
+                                  </div>
+                                </>
+                              )}
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            {!isSelected && (
-                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                            )}
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                              onClick={(e) => handleDelete(benchmark.id, e)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
+                          {!isEditing && (
+                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              {!isSelected && (
+                                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                onClick={(e) => handleStartRename(benchmark, e)}
+                                title="Rename"
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                onClick={(e) => handleDelete(benchmark.id, e)}
+                                title="Delete"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          )}
                         </div>
 
                         {/* Hover preview */}
-                        {isHovered && !isSelected && (
+                        {isHovered && !isSelected && !inModal && (
                           <div className="absolute left-full ml-2 top-0 z-50 w-64 p-3 bg-popover border rounded-lg shadow-lg">
                             <p className="text-xs font-medium mb-2">Quick Stats</p>
                             <div className="space-y-1 text-xs text-muted-foreground">

@@ -9,15 +9,34 @@ import {
   CollapsibleTrigger 
 } from "@/components/ui/collapsible"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { BenchmarkDataManager } from "./BenchmarkDataManager"
 
 interface BenchmarkHeaderProps {
   data: BenchmarkResult
   currentBenchmarkName?: string | null
+  onBenchmarkChange: (data: BenchmarkResult | null, id?: string) => void
+  selectedBenchmarkId?: string | null
+  benchmarksCount?: number
 }
 
-export function BenchmarkHeader({ data, currentBenchmarkName }: BenchmarkHeaderProps) {
+export function BenchmarkHeader({ 
+  data, 
+  currentBenchmarkName,
+  onBenchmarkChange,
+  selectedBenchmarkId,
+  benchmarksCount = 0
+}: BenchmarkHeaderProps) {
   const { metadata, endpoints, version, with_load, grpc_config, endpoint1_summary, endpoint2_summary } = data
   const [isConfigOpen, setIsConfigOpen] = useState(false)
+  const [isDataManagerOpen, setIsDataManagerOpen] = useState(false)
   
   const formatDuration = (ms: number) => {
     if (ms < 1000) return `${ms}ms`
@@ -50,6 +69,14 @@ export function BenchmarkHeader({ data, currentBenchmarkName }: BenchmarkHeaderP
   }
   
   const fasterEndpoint = getFasterEndpoint()
+
+  // Handle benchmark change and close dialog
+  const handleBenchmarkChangeInternal = (data: BenchmarkResult | null, id?: string) => {
+    onBenchmarkChange(data, id)
+    if (data) {
+      setIsDataManagerOpen(false)
+    }
+  }
   
   return (
     <div className="space-y-4 flex-1">
@@ -68,17 +95,50 @@ export function BenchmarkHeader({ data, currentBenchmarkName }: BenchmarkHeaderP
             <p className="text-sm text-muted-foreground">gRPC Endpoint Benchmark Tool</p>
           </div>
         </div>
-        <div className="text-right space-y-1">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Database className="h-4 w-4" />
-            <span>Version: {version}</span>
+        <div className="flex items-center gap-2">
+          <div className="text-right space-y-1">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Database className="h-4 w-4" />
+              <span>Version: {version}</span>
+            </div>
+            {with_load && (
+              <Badge variant="secondary" className="text-xs">
+                <Activity className="h-3 w-3 mr-1" />
+                Load Testing Mode
+              </Badge>
+            )}
           </div>
-          {with_load && (
-            <Badge variant="secondary" className="text-xs">
-              <Activity className="h-3 w-3 mr-1" />
-              Load Testing Mode
-            </Badge>
-          )}
+
+          {/* Data manager toggle button */}
+          <Dialog open={isDataManagerOpen} onOpenChange={setIsDataManagerOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <Database className="h-4 w-4" />
+                <span className="hidden sm:inline">Benchmarks</span>
+                {benchmarksCount > 0 && (
+                  <span className="text-xs bg-muted px-1.5 py-0.5 rounded-full">
+                    {benchmarksCount}
+                  </span>
+                )}
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+              <DialogHeader>
+                <DialogTitle>Benchmark Manager</DialogTitle>
+                <DialogDescription>
+                  Upload new benchmarks or switch between existing ones
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex-1 overflow-y-auto">
+                <BenchmarkDataManager
+                  onDataChange={handleBenchmarkChangeInternal}
+                  currentData={data}
+                  initialSelectedId={selectedBenchmarkId}
+                  inModal={true}
+                />
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
       
