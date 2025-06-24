@@ -9,7 +9,6 @@ export type StageVisibility = {
   download: boolean
   replay: boolean
   confirmation: boolean
-  finalization: boolean
 }
 
 interface TimelineControlsProps {

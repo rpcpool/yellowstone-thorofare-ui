@@ -23,8 +23,7 @@ export function SlotTooltip({
   visibleStages = {
     download: true,
     replay: true,
-    confirmation: true,
-    finalization: true
+    confirmation: true
   }
 }: SlotTooltipProps) {
   const tooltipRef = useRef<HTMLDivElement>(null)
@@ -34,18 +33,18 @@ export function SlotTooltip({
       const tooltip = tooltipRef.current
       const rect = tooltip.getBoundingClientRect()
       
-      // Adjust position to keep tooltip on screen
-      let adjustedX = x + 10
+      // offset more from cursor to prevent interference
+      let adjustedX = x + 20
       let adjustedY = y - rect.height / 2
 
-      // Keep tooltip within viewport
-      if (adjustedX + rect.width > window.innerWidth) {
-        adjustedX = x - rect.width - 10
+      // keep within viewport
+      if (adjustedX + rect.width > window.innerWidth - 10) {
+        adjustedX = x - rect.width - 20
       }
-      if (adjustedY < 0) {
+      if (adjustedY < 10) {
         adjustedY = 10
       }
-      if (adjustedY + rect.height > window.innerHeight) {
+      if (adjustedY + rect.height > window.innerHeight - 10) {
         adjustedY = window.innerHeight - rect.height - 10
       }
 
@@ -74,43 +73,59 @@ export function SlotTooltip({
 
   if (!visible) return null
 
-  // Calculate total duration for visible stages only
   const calculateTotalDuration = () => {
     let total = 0
     if (visibleStages.download) total += endpoint.durations.download_ms
     if (visibleStages.replay) total += endpoint.durations.replay_ms
     if (visibleStages.confirmation) total += endpoint.durations.confirmation_ms
-    if (visibleStages.finalization) total += endpoint.durations.finalization_ms
     return total
   }
 
   const stages = [
     { key: 'download', label: 'Download', duration: endpoint.durations.download_ms },
     { key: 'replay', label: 'Replay', duration: endpoint.durations.replay_ms },
-    { key: 'confirmation', label: 'Confirmation', duration: endpoint.durations.confirmation_ms },
-    { key: 'finalization', label: 'Finalization', duration: endpoint.durations.finalization_ms }
+    { key: 'confirmation', label: 'Confirmation', duration: endpoint.durations.confirmation_ms }
   ]
 
   return createPortal(
     <div
       ref={tooltipRef}
-      className="fixed z-50 bg-card border border-border rounded-lg shadow-lg p-4 space-y-3 min-w-[320px] pointer-events-none"
-      style={{ left: x, top: y }}
+      className="fixed z-50 bg-card border border-border rounded-lg shadow-lg p-4 space-y-3 min-w-[320px] pointer-events-none select-none"
+      style={{ 
+        left: x, 
+        top: y,
+        // prevent tooltip from blocking mouse events
+        pointerEvents: 'none'
+      }}
     >
       <div>
         <h4 className="font-semibold text-sm text-foreground">Slot {slot} - {endpointName}</h4>
-        {endpoint.first_shred_delay_ms !== null && endpoint.first_shred_delay_ms > 0 && (
-          <p className="text-xs text-muted-foreground">
-            First Shred Delay: {formatDuration(endpoint.first_shred_delay_ms)}
-            {endpoint.first_shred_delay_ms < 1 && (
-              <span className="text-yellow-500 ml-1">(sub-millisecond)</span>
-            )}
-          </p>
-        )}
+        
+        {/* show all delays if present */}
+        <div className="space-y-0.5 mt-1">
+          {endpoint.first_shred_delay_ms !== null && endpoint.first_shred_delay_ms > 0 && (
+            <p className="text-xs text-muted-foreground">
+              Reception Delay: {formatDuration(endpoint.first_shred_delay_ms)}
+              {endpoint.first_shred_delay_ms < 1 && (
+                <span className="text-yellow-500 ml-1">(sub-ms)</span>
+              )}
+            </p>
+          )}
+          {endpoint.processing_delay_ms !== null && endpoint.processing_delay_ms > 0 && (
+            <p className="text-xs text-muted-foreground">
+              Processing Delay: {formatDuration(endpoint.processing_delay_ms)}
+            </p>
+          )}
+          {endpoint.confirmation_delay_ms !== null && endpoint.confirmation_delay_ms > 0 && (
+            <p className="text-xs text-muted-foreground">
+              Confirmation Delay: {formatDuration(endpoint.confirmation_delay_ms)}
+            </p>
+          )}
+        </div>
       </div>
       
       <div className="space-y-1">
-        <p className="text-xs font-semibold text-muted-foreground">Stages:</p>
+        <p className="text-xs font-semibold text-muted-foreground">Stage Durations:</p>
         <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
           {stages
             .filter(stage => visibleStages[stage.key as keyof StageVisibility])
@@ -125,7 +140,7 @@ export function SlotTooltip({
       </div>
       
       <div className="space-y-1">
-        <p className="text-xs font-semibold text-muted-foreground">Timeline:</p>
+        <p className="text-xs font-semibold text-muted-foreground">Status Transitions:</p>
         <div className="text-xs space-y-0.5 font-mono">
           {endpoint.transitions.map((t, i) => (
             <div key={i} className="flex justify-between gap-4">
@@ -137,7 +152,7 @@ export function SlotTooltip({
       </div>
       
       <div className="text-xs text-muted-foreground border-t pt-2">
-        Total (visible stages): {formatDuration(calculateTotalDuration())}
+        Total Processing: {formatDuration(calculateTotalDuration())}
       </div>
     </div>,
     document.body

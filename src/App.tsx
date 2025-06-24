@@ -26,7 +26,6 @@ function App() {
     download: true,
     replay: true,
     confirmation: true,
-    finalization: false
   })
   
   const handleZoomIn = () => {
