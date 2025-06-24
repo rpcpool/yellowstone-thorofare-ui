@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect } from "react"
 import { BenchmarkHeader } from "@/components/BenchmarkHeader"
 import { TimelineControls, type StageVisibility } from "@/components/TimelineControls"
@@ -8,11 +7,20 @@ import { BenchmarkDataManager } from "@/components/BenchmarkDataManager"
 import { PIXELS_PER_MS } from "@/lib/constants"
 import type { BenchmarkResult } from "./lib/types"
 
+type StoredBenchmark = {
+  id: string;
+  name: string;
+  timestamp: number;
+  data: BenchmarkResult;
+  endpoint1Name?: string | null;
+  endpoint2Name?: string | null;
+}
+
 function App() {
   const [currentEndpointNames, setCurrentEndpointNames] = useState<[string | null, string | null]>([null, null])
   const [benchmarkData, setBenchmarkData] = useState<BenchmarkResult | null>(null)
   const [selectedBenchmarkId, setSelectedBenchmarkId] = useState<string | null>(null)
-  const [refreshKey, setRefreshKey] = useState(0) // Add this to force refresh
+  const [refreshKey, setRefreshKey] = useState(0)
   const [zoom, setZoom] = useState(0.5)
   const [viewportOffset, setViewportOffset] = useState(0)
   const [visibleStages, setVisibleStages] = useState<StageVisibility>({
@@ -116,8 +124,8 @@ function App() {
       try {
         const stored = localStorage.getItem("yellowstone-benchmarks")
         if (stored) {
-          const benchmarks = JSON.parse(stored)
-          const benchmark = benchmarks.find((b: any) => b.id === id)
+          const benchmarks = JSON.parse(stored) as StoredBenchmark[]
+          const benchmark = benchmarks.find((b) => b.id === id)
           if (benchmark) {
             setCurrentEndpointNames([
               benchmark.endpoint1Name || null,
@@ -135,15 +143,15 @@ function App() {
 
   // Handler for endpoint name changes
   const handleEndpointNameChange = (endpointIndex: 0 | 1, newName: string) => {
-      console.log('Changing endpoint', endpointIndex, 'to', newName)
+    console.log('Changing endpoint', endpointIndex, 'to', newName)
     if (!selectedBenchmarkId) return
     
     // Update in localStorage
     try {
       const stored = localStorage.getItem("yellowstone-benchmarks")
       if (stored) {
-        const benchmarks = JSON.parse(stored)
-        const updated = benchmarks.map((b: any) => {
+        const benchmarks = JSON.parse(stored) as StoredBenchmark[]
+        const updated = benchmarks.map((b) => {
           if (b.id === selectedBenchmarkId) {
             if (endpointIndex === 0) {
               return { ...b, endpoint1Name: newName || null }
@@ -172,8 +180,8 @@ function App() {
     try {
       const stored = localStorage.getItem("yellowstone-benchmarks")
       if (stored) {
-        const benchmarks = JSON.parse(stored)
-        const current = benchmarks.find((b: any) => b.id === selectedBenchmarkId)
+        const benchmarks = JSON.parse(stored) as StoredBenchmark[]
+        const current = benchmarks.find((b) => b.id === selectedBenchmarkId)
         return current?.name || null
       }
     } catch {
@@ -187,7 +195,7 @@ function App() {
     try {
       const stored = localStorage.getItem("yellowstone-benchmarks")
       if (stored) {
-        const benchmarks = JSON.parse(stored)
+        const benchmarks = JSON.parse(stored) as StoredBenchmark[]
         return benchmarks.length
       }
     } catch {
@@ -226,10 +234,10 @@ function App() {
     try {
       const stored = localStorage.getItem("yellowstone-benchmarks")
       if (stored) {
-        const benchmarks = JSON.parse(stored)
+        const benchmarks = JSON.parse(stored) as StoredBenchmark[]
         if (benchmarks.length > 0) {
           // Load the most recent benchmark
-          const mostRecent = benchmarks.sort((a: any, b: any) => b.timestamp - a.timestamp)[0]
+          const mostRecent = benchmarks.sort((a, b) => b.timestamp - a.timestamp)[0]
           setBenchmarkData(mostRecent.data)
           setSelectedBenchmarkId(mostRecent.id)
           setCurrentEndpointNames([
