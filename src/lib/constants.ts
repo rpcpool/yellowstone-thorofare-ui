@@ -12,6 +12,7 @@ export const STAGE_LABELS = {
   confirmation: "Confirm",
   finalization: "Finalize",
   first_shred_delay: "Delay",
+  confirmation_delay: "Confirm Delay",
 } as const;
 
 export const ENDPOINT_COLORS = {
