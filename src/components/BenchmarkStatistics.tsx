@@ -1,7 +1,8 @@
 import { Card } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Badge } from "@/components/ui/badge"
 import type { BenchmarkResult } from "@/lib/types"
-import { Clock, Zap, AlertCircle, Info } from "lucide-react"
+import { Clock, Zap, AlertCircle, Info, Network, Cpu, Users } from "lucide-react"
 import { parseEndpointName } from "@/lib/endpoint-utils"
 import {
   Tooltip,
@@ -11,7 +12,7 @@ import {
 } from "@/components/ui/tooltip"
 
 interface BenchmarkStatisticsProps {
-  data: BenchmarkResult,
+  data: BenchmarkResult
   endpointNames?: [string | null, string | null]
 }
 
@@ -33,12 +34,31 @@ interface EndpointStageStats {
   }
 }
 
+const STAGE_CATEGORIES = {
+  network: {
+    label: "Network Performance",
+    icon: Network,
+    description: "How quickly endpoints receive data from the network",
+    stages: ['first_shred_delay', 'processing_delay']
+  },
+  processing: {
+    label: "Local Processing",
+    icon: Cpu,
+    description: "How fast endpoints process slots locally",
+    stages: ['download', 'replay']
+  },
+  consensus: {
+    label: "Network Consensus",
+    icon: Users,
+    description: "Depends on overall network agreement, not individual endpoint speed",
+    stages: ['confirmation', 'finalization']
+  }
+}
+
 export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatisticsProps) {
-  // Better colors for contrast
   const EP1_COLOR = "#F052FF"
   const EP2_COLOR = "#4A90FF"
 
-  // Calculate which endpoint sees slots first
   const calculateFirstSeenStats = () => {
     let ep1First = 0
     let ep2First = 0
@@ -78,7 +98,6 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
     }
   }
 
-  // Calculate stats for all stages including the new delay metrics
   const calculateStageStats = (): Record<string, EndpointStageStats> => {
     const stages = [
       'first_shred_delay',
@@ -157,13 +176,11 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
     return stats
   }
 
-  // Find outliers (slots that are significantly slower)
   const findOutliers = () => {
     const outliers: { slot: number, stage: string, endpoint: string, duration: number, zscore: number }[] = []
     const stages = ['download', 'replay', 'confirmation', 'finalization'] as const
 
     stages.forEach(stage => {
-      // Calculate mean and std dev for each endpoint separately
       const endpoints = ['EP1', 'EP2'] as const
       endpoints.forEach(ep => {
         const values = data.slots.map(slot => ({
@@ -177,10 +194,10 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
         const variance = values.reduce((a, b) => a + Math.pow(b.value - mean, 2), 0) / values.length
         const stdDev = Math.sqrt(variance)
 
-        // Find outliers (z-score > 2.5)
+        // z-score > 2.5 = outlier
         values.forEach(({ slot, value }) => {
           const zscore = Math.abs((value - mean) / stdDev)
-          if (zscore > 2.5 && value > mean) { // Only interested in slow outliers
+          if (zscore > 2.5 && value > mean) {
             outliers.push({ slot, stage, endpoint: ep, duration: value, zscore })
           }
         })
@@ -204,25 +221,23 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
   const formatPercentage = (value: number) => `${value.toFixed(1)}%`
 
   const stageDescriptions = {
-    first_shred_delay: "Time difference between endpoints receiving first slot data",
-    processing_delay: "Time difference between endpoints processing the slot",
-    download: "Time to download all shreds (data chunks) for the slot",
-    replay: "Time to execute all transactions in the slot",
-    confirmation: "Time for the slot to reach confirmation status",
-    finalization: "Time for the slot to reach finalized status"
+    first_shred_delay: "When endpoints receive data at different times, this shows the delay of the slower endpoint",
+    processing_delay: "Time difference between when endpoints finish processing the same slot",
+    download: "Time to receive all pieces of data (shreds) that make up a slot",
+    confirmation: "Time until the network agrees this slot is valid (not endpoint-dependent)",
+    finalization: "Time until the slot is permanently recorded (not endpoint-dependent)"
   }
 
   const stageLabels = {
-    first_shred_delay: "First Shred Delay",
+    first_shred_delay: "Reception Delay (First Shred)",
     processing_delay: "Processing Delay",
-    download: "Download",
-    replay: "Replay",
-    confirmation: "Confirmation",
-    finalization: "Finalization"
+    download: "Download Time",
+    replay: "Transaction Replay",
+    confirmation: "Network Confirmation",
+    finalization: "Network Finalization"
   }
 
   const getEndpointShortName = (idx: number) => {
-    // Use custom name if available
     if (endpointNames?.[idx]) {
       return endpointNames[idx]!
     }
@@ -233,11 +248,10 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
   return (
     <TooltipProvider>
       <div className="space-y-4">
-        <h2 className="text-2xl font-bold">Performance Statistics</h2>
+        <h2 className="text-2xl font-bold">Performance Analysis</h2>
         
-        {/* First Row - Key Metrics (removed Avg Total Processing) */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* First Shred Reception */}
+          {/* first to receive */}
           <Card className="p-4">
             <div className="flex items-center justify-between mb-2">
               <Zap className="h-4 w-4 text-muted-foreground" />
@@ -245,12 +259,12 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
                 <TooltipTrigger>
                   <Info className="h-3 w-3 text-muted-foreground" />
                 </TooltipTrigger>
-                <TooltipContent>
-                  <p className="text-xs">Which endpoint receives slot data first from the network</p>
+                <TooltipContent className="max-w-xs">
+                  <p className="text-xs">Shows which endpoint typically receives new blockchain data first. This indicates network proximity and routing efficiency.</p>
                 </TooltipContent>
               </Tooltip>
             </div>
-            <p className="text-sm text-muted-foreground">First Shred Reception</p>
+            <p className="text-sm text-muted-foreground">First to Receive</p>
             <div className="space-y-1">
               <div className="flex justify-between text-sm">
                 <span style={{ color: EP1_COLOR }}>{getEndpointShortName(0)} First:</span>
@@ -267,7 +281,7 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
             </div>
           </Card>
 
-          {/* First Shred Delay */}
+          {/* reception delay */}
           <Card className="p-4">
             <div className="flex items-center justify-between mb-2">
               <Clock className="h-4 w-4 text-muted-foreground" />
@@ -275,12 +289,12 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
                 <TooltipTrigger>
                   <Info className="h-3 w-3 text-muted-foreground" />
                 </TooltipTrigger>
-                <TooltipContent>
-                  <p className="text-xs">Time the slower endpoint waits after the faster one receives the slot</p>
+                <TooltipContent className="max-w-xs">
+                  <p className="text-xs">Average time the slower endpoint waits after the faster one receives data. Lower is better. Shows network latency differences.</p>
                 </TooltipContent>
               </Tooltip>
             </div>
-            <p className="text-sm text-muted-foreground">First Shred Delay</p>
+            <p className="text-sm text-muted-foreground">Average Reception Delay (First Shred)</p>
             <div className="space-y-1">
               <div className="flex justify-between text-sm">
                 <span style={{ color: EP1_COLOR }}>{getEndpointShortName(0)}:</span>
@@ -296,7 +310,7 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
             </div>
           </Card>
 
-          {/* Outliers with scroll */}
+          {/* outliers */}
           <Card className="p-4">
             <div className="flex items-center justify-between mb-2">
               <AlertCircle className="h-4 w-4 text-muted-foreground" />
@@ -304,8 +318,8 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
                 <TooltipTrigger>
                   <Info className="h-3 w-3 text-muted-foreground" />
                 </TooltipTrigger>
-                <TooltipContent>
-                  <p className="text-xs">Slots with processing times 2.5 standard deviations from mean</p>
+                <TooltipContent className="max-w-xs">
+                  <p className="text-xs">Slots that took unusually long to process. These outliers can indicate temporary issues or network problems.</p>
                 </TooltipContent>
               </Tooltip>
             </div>
@@ -328,146 +342,173 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
           </Card>
         </div>
 
-        {/* Second Row - Stage Performance (Separated by Endpoint) */}
-        <div className="space-y-4">
-          <h3 className="text-lg font-semibold">Stage Performance by Endpoint</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {Object.entries(stageStats).map(([stage, stats]) => (
-              <Card key={stage} className="p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="font-semibold text-sm">
-                    {stageLabels[stage as keyof typeof stageLabels]}
-                  </h4>
-                  <Tooltip>
-                    <TooltipTrigger>
-                      <Info className="h-3 w-3 text-muted-foreground" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="text-xs">{stageDescriptions[stage as keyof typeof stageDescriptions]}</p>
-                    </TooltipContent>
-                  </Tooltip>
+        {/* stage performance grouped by category */}
+        <div className="space-y-6">
+          {Object.entries(STAGE_CATEGORIES).map(([category, categoryInfo]) => {
+            const Icon = categoryInfo.icon
+            const relevantStages = Object.entries(stageStats).filter(([stage]) => 
+              categoryInfo.stages.includes(stage)
+            )
+            
+            if (relevantStages.length === 0) return null
+            
+            return (
+              <div key={category} className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <Icon className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <h3 className="text-lg font-semibold">{categoryInfo.label}</h3>
+                    <p className="text-sm text-muted-foreground">{categoryInfo.description}</p>
+                  </div>
+                  {category === 'consensus' && (
+                    <Badge variant="secondary" className="ml-auto">
+                      Network-dependent
+                    </Badge>
+                  )}
                 </div>
                 
-                {/* EP1 Stats */}
-                <div className="mb-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: EP1_COLOR }} />
-                    <span className="text-xs font-semibold" style={{ color: EP1_COLOR }}>
-                      {getEndpointShortName(0)}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                    <div className="text-muted-foreground">P50:</div>
-                    <div className="font-mono text-right">{formatDuration(stats.ep1.p50)}</div>
-                    
-                    <div className="text-muted-foreground">P90:</div>
-                    <div className="font-mono text-right">{formatDuration(stats.ep1.p90)}</div>
-                    
-                    <div className="text-muted-foreground">P99:</div>
-                    <div className="font-mono text-right">{formatDuration(stats.ep1.p99)}</div>
-                    
-                    <div className="text-muted-foreground">Range:</div>
-                    <div className="font-mono text-right text-[10px]">
-                      {formatDuration(stats.ep1.min)} - {formatDuration(stats.ep1.max)}
-                    </div>
-                  </div>
-                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-2 gap-4">
+                  {relevantStages.map(([stage, stats]) => (
+                    <Card key={stage} className={`p-4 ${category === 'consensus' ? 'opacity-75' : ''}`}>
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="font-semibold text-sm">
+                          {stageLabels[stage as keyof typeof stageLabels]}
+                        </h4>
+                        <Tooltip>
+                          <TooltipTrigger>
+                            <Info className="h-3 w-3 text-muted-foreground" />
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-xs">
+                            <p className="text-xs">{stageDescriptions[stage as keyof typeof stageDescriptions]}</p>
+                            {category === 'consensus' && (
+                              <p className="text-xs mt-1 text-yellow-500">⚠️ This metric depends on overall network consensus, not individual endpoint performance.</p>
+                            )}
+                          </TooltipContent>
+                        </Tooltip>
+                      </div>
+                      
+                      <div className="mb-3">
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: EP1_COLOR }} />
+                          <span className="text-xs font-semibold" style={{ color: EP1_COLOR }}>
+                            {getEndpointShortName(0)}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                          <div className="text-muted-foreground">P50:</div>
+                          <div className="font-mono text-right">{formatDuration(stats.ep1.p50)}</div>
+                          
+                          <div className="text-muted-foreground">P90:</div>
+                          <div className="font-mono text-right">{formatDuration(stats.ep1.p90)}</div>
+                          
+                          <div className="text-muted-foreground">P99:</div>
+                          <div className="font-mono text-right">{formatDuration(stats.ep1.p99)}</div>
+                          
+                          <div className="text-muted-foreground">Range:</div>
+                          <div className="font-mono text-right text-[10px]">
+                            {formatDuration(stats.ep1.min)} - {formatDuration(stats.ep1.max)}
+                          </div>
+                        </div>
+                      </div>
 
-                {/* EP2 Stats */}
-                <div className="mb-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: EP2_COLOR }} />
-                    <span className="text-xs font-semibold" style={{ color: EP2_COLOR }}>
-                      {getEndpointShortName(1)}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                    <div className="text-muted-foreground">P50:</div>
-                    <div className="font-mono text-right">{formatDuration(stats.ep2.p50)}</div>
-                    
-                    <div className="text-muted-foreground">P90:</div>
-                    <div className="font-mono text-right">{formatDuration(stats.ep2.p90)}</div>
-                    
-                    <div className="text-muted-foreground">P99:</div>
-                    <div className="font-mono text-right">{formatDuration(stats.ep2.p99)}</div>
-                    
-                    <div className="text-muted-foreground">Range:</div>
-                    <div className="font-mono text-right text-[10px]">
-                      {formatDuration(stats.ep2.min)} - {formatDuration(stats.ep2.max)}
-                    </div>
-                  </div>
+                      <div className="mb-3">
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: EP2_COLOR }} />
+                          <span className="text-xs font-semibold" style={{ color: EP2_COLOR }}>
+                            {getEndpointShortName(1)}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                          <div className="text-muted-foreground">P50:</div>
+                          <div className="font-mono text-right">{formatDuration(stats.ep2.p50)}</div>
+                          
+                          <div className="text-muted-foreground">P90:</div>
+                          <div className="font-mono text-right">{formatDuration(stats.ep2.p90)}</div>
+                          
+                          <div className="text-muted-foreground">P99:</div>
+                          <div className="font-mono text-right">{formatDuration(stats.ep2.p99)}</div>
+                          
+                          <div className="text-muted-foreground">Range:</div>
+                          <div className="font-mono text-right text-[10px]">
+                            {formatDuration(stats.ep2.min)} - {formatDuration(stats.ep2.max)}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* only show differences for performance metrics */}
+                      {category !== 'consensus' && (
+                        <div className="pt-2 border-t">
+                          <div className="text-xs space-y-1">
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Δ P50:</span>
+                              <span className="font-mono">
+                                {formatDuration(stats.diff.p50.value)}
+                                {stats.diff.p50.faster !== 'tie' && (
+                                  <span 
+                                    className="ml-1 text-[10px]"
+                                    style={{ color: stats.diff.p50.faster === 'ep1' ? EP1_COLOR : EP2_COLOR }}
+                                  >
+                                    ({getEndpointShortName(stats.diff.p50.faster === 'ep1' ? 0 : 1)} faster)
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Δ P90:</span>
+                              <span className="font-mono">
+                                {formatDuration(stats.diff.p90.value)}
+                                {stats.diff.p90.faster !== 'tie' && (
+                                  <span 
+                                    className="ml-1 text-[10px]"
+                                    style={{ color: stats.diff.p90.faster === 'ep1' ? EP1_COLOR : EP2_COLOR }}
+                                  >
+                                    ({getEndpointShortName(stats.diff.p90.faster === 'ep1' ? 0 : 1)} faster)
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </Card>
+                  ))}
                 </div>
-                
-                {/* Differences with winner */}
-                <div className="pt-2 border-t">
-                  <div className="text-xs space-y-1">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Δ P50:</span>
-                      <span className="font-mono">
-                        {formatDuration(stats.diff.p50.value)}
-                        {stats.diff.p50.faster !== 'tie' && (
-                          <span 
-                            className="ml-1 text-[10px]"
-                            style={{ color: stats.diff.p50.faster === 'ep1' ? EP1_COLOR : EP2_COLOR }}
-                          >
-                            ({getEndpointShortName(stats.diff.p50.faster === 'ep1' ? 0 : 1)} faster)
-                          </span>
-                        )}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Δ P90:</span>
-                      <span className="font-mono">
-                        {formatDuration(stats.diff.p90.value)}
-                        {stats.diff.p90.faster !== 'tie' && (
-                          <span 
-                            className="ml-1 text-[10px]"
-                            style={{ color: stats.diff.p90.faster === 'ep1' ? EP1_COLOR : EP2_COLOR }}
-                          >
-                            ({getEndpointShortName(stats.diff.p90.faster === 'ep1' ? 0 : 1)} faster)
-                          </span>
-                        )}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Δ P99:</span>
-                      <span className="font-mono">
-                        {formatDuration(stats.diff.p99.value)}
-                        {stats.diff.p99.faster !== 'tie' && (
-                          <span 
-                            className="ml-1 text-[10px]"
-                            style={{ color: stats.diff.p99.faster === 'ep1' ? EP1_COLOR : EP2_COLOR }}
-                          >
-                            ({getEndpointShortName(stats.diff.p99.faster === 'ep1' ? 0 : 1)} faster)
-                          </span>
-                        )}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
+              </div>
+            )
+          })}
+        </div>
 
-          {/* Metric Explanation */}
-          <Card className="p-4 bg-muted/50">
-            <div className="flex items-start gap-2">
-              <AlertCircle className="h-4 w-4 text-muted-foreground mt-0.5" />
-              <div className="text-sm text-muted-foreground">
+        {/* understanding metrics */}
+        <Card className="p-4 bg-muted/50">
+          <div className="flex items-start gap-2">
+            <Info className="h-4 w-4 text-muted-foreground mt-0.5" />
+            <div className="text-sm text-muted-foreground space-y-3">
+              <div>
                 <p className="font-semibold mb-1">Understanding the metrics:</p>
                 <ul className="space-y-1 text-xs">
-                  <li>• <span className="font-semibold">P50 (Median)</span> = 50% of slots processed faster than this value</li>
-                  <li>• <span className="font-semibold">P90</span> = 90% of slots processed faster than this value</li>
-                  <li>• <span className="font-semibold">P99</span> = 99% of slots processed faster than this value</li>
-                  <li>• <span className="font-semibold">Δ (Delta)</span> = Absolute difference between endpoints</li>
-                  <li>• <span className="font-semibold">First Shred Reception</span> = Which endpoint receives slot data first from the network</li>
-                  <li>• <span className="font-semibold">First Shred Delay</span> = How long the slower endpoint waits for slot data</li>
-                  <li>• <span className="font-semibold">Processing Delay</span> = Time difference between endpoints finishing processing</li>
+                  <li>• <span className="font-semibold">P50 (Median)</span> = Half of all slots were faster than this</li>
+                  <li>• <span className="font-semibold">P90</span> = 90% of slots were faster than this</li>
+                  <li>• <span className="font-semibold">P99</span> = 99% of slots were faster than this (worst-case performance)</li>
+                  <li>• <span className="font-semibold">Δ (Delta)</span> = Difference between endpoints</li>
                 </ul>
               </div>
+              
+              <div>
+                <p className="font-semibold mb-1">Performance categories:</p>
+                <ul className="space-y-1 text-xs">
+                  <li>• <span className="font-semibold">Network Performance</span> = How fast data arrives from the network</li>
+                  <li>• <span className="font-semibold">Local Processing</span> = How fast the endpoint processes data</li>
+                  <li>• <span className="font-semibold">Network Consensus</span> = Depends on the entire network, not endpoint speed</li>
+                </ul>
+              </div>
+              
+              <p className="text-xs text-yellow-600">
+                ⚠️ <span className="font-semibold">Important:</span> Only Network and Processing metrics indicate endpoint performance. 
+                Consensus metrics show network-wide agreement timing and don't reflect individual endpoint quality.
+              </p>
             </div>
-          </Card>
-        </div>
+          </div>
+        </Card>
       </div>
     </TooltipProvider>
   )
