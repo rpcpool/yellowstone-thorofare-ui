@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect } from "react"
 import { BenchmarkHeader } from "@/components/BenchmarkHeader"
 import { TimelineControls, type StageVisibility } from "@/components/TimelineControls"
