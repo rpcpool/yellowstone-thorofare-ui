@@ -61,6 +61,8 @@ export interface SlotComparison {
 export interface SlotDetail {
   first_shred_delay_ms: number | null;
   processing_delay_ms: number | null;
+  confirmation_delay_ms: number | null;
+  finalization_delay_ms: number | null;
   transitions: Transition[];
   durations: StageDurations;
 }
