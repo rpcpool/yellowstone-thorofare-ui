@@ -51,7 +51,7 @@ const STAGE_CATEGORIES = {
     label: "Network Consensus",
     icon: Users,
     description: "Waiting for network agreement (all endpoints must wait for the same consensus)",
-    stages: ['confirmation', 'finalization', 'confirmation_delay', 'finalization_delay']
+    stages: ['confirmation_delay', 'finalization_delay']
   }
 }
 
@@ -236,25 +236,21 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
   const formatPercentage = (value: number) => `${value.toFixed(1)}%`
 
   const stageDescriptions = {
-    first_shred_delay: "Time difference between when we receive 'first shred' notifications from each endpoint. Includes network latency (ping time).",
-    processing_delay: "Time difference between when we receive 'processed' notifications from each endpoint. Includes network latency (ping time).",
-    download: "Time between receiving 'FirstShredReceived' and 'Completed' updates from each endpoint. Affected by endpoint's download speed AND network latency to us.",
-    replay: "Time between receiving 'CreatedBank' and 'Processed' updates from each endpoint. Affected by endpoint's CPU speed AND network latency to us.",
-    confirmation: "Time between receiving 'Processed' and 'Confirmed' updates. Shows how long each endpoint waits for network consensus.",
-    finalization: "Time between receiving 'Confirmed' and 'Finalized' updates. Shows how long until permanent commitment.",
-    confirmation_delay: "Time difference between when we receive confirmation updates from each endpoint. Heavily influenced by ping differences.",
-    finalization_delay: "Time difference between when we receive finalization updates from each endpoint. Heavily influenced by ping differences."
+    first_shred_delay: "Time difference between when we receive 'FirstShredReceived' notifications from each endpoint.",
+    processing_delay: "Time difference between when we receive 'Processed' notifications from each endpoint.",
+    confirmation_delay: "Time difference between when we receive 'Confirmed' updates from each endpoint.",
+    finalization_delay: "Time difference between when we receive 'Finalized' updates from each endpoint.",
+    replay: "Time between receiving 'CreatedBank' and 'Processed' updates from each endpoint. Affected by endpoint's CPU speed.",
+    download: "Time between receiving 'FirstShredReceived' and 'Completed' updates from each endpoint. Affected by endpoint's download speed.",
   }
 
   const stageLabels = {
-    first_shred_delay: "Reception Delay (First Shred)",
-    processing_delay: "Processing Completion Delay",
-    download: "Download Duration (observed)",
-    replay: "Replay Duration (observed)",
-    confirmation: "Awaiting Confirmation",
-    finalization: "Awaiting Finalization",
-    confirmation_delay: "Confirmation Update Delay",
-    finalization_delay: "Finalization Update Delay"
+    first_shred_delay: "First Shred Delay",
+    processing_delay: "Processed Delay",
+    download: "Download Duration",
+    replay: "Replay Duration",
+    confirmation_delay: "Confirmed Delay",
+    finalization_delay: "Finalized Delay"
   }
 
   const getEndpointShortName = (idx: number) => {
@@ -279,11 +275,11 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
                   <Info className="h-3 w-3 text-muted-foreground" />
                 </TooltipTrigger>
                 <TooltipContent className="max-w-xs">
-                  <p className="text-xs">Shows which endpoint typically delivers new blockchain data to us first. Heavily influenced by ping time - the endpoint with lower ping has a significant advantage.</p>
+                  <p className="text-xs">Shows which endpoint typically delivers 'FirstShredReceived' data to us first. Heavily influenced by ping time - the endpoint with lower ping has a significant advantage.</p>
                 </TooltipContent>
               </Tooltip>
             </div>
-            <p className="text-sm text-muted-foreground">First to Deliver Updates</p>
+            <p className="text-sm text-muted-foreground">First Seen Shred</p>
             <div className="space-y-1">
               <div className="flex justify-between text-sm">
                 <span style={{ color: EP1_COLOR }}>{getEndpointShortName(0)} First to us:</span>
@@ -292,10 +288,6 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
               <div className="flex justify-between text-sm">
                 <span style={{ color: EP2_COLOR }}>{getEndpointShortName(1)} First to us:</span>
                 <span className="font-mono">{formatPercentage(firstSeenStats.ep2Percentage)}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Simultaneous:</span>
-                <span className="font-mono">{formatPercentage(firstSeenStats.simultaneousPercentage)}</span>
               </div>
             </div>
           </Card>
@@ -308,11 +300,11 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
                   <Info className="h-3 w-3 text-muted-foreground" />
                 </TooltipTrigger>
                 <TooltipContent className="max-w-xs">
-                  <p className="text-xs">Average additional time before we receive data from the slower endpoint. Includes both actual delay AND ping time differences. An endpoint with higher ping will always show higher delay here.</p>
+                  <p className="text-xs">Average delay when we received a delayed 'FirstShredReceived' Slot Status Update.</p>
                 </TooltipContent>
               </Tooltip>
             </div>
-            <p className="text-sm text-muted-foreground">Average Reception Delay (First Shred)</p>
+            <p className="text-sm text-muted-foreground">Average First Shred Delay</p>
             <div className="space-y-1">
               <div className="flex justify-between text-sm">
                 <span style={{ color: EP1_COLOR }}>{getEndpointShortName(0)}:</span>
@@ -323,7 +315,7 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
                 <span className="font-mono">{formatDuration(firstSeenStats.avgDelayTime.ep2)}</span>
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Additional latency when delivering updates later
+                Average latency when received later
               </p>
             </div>
           </Card>
@@ -425,7 +417,7 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
                               <p className="text-xs mt-1 text-blue-500">ℹ️ Heavily influenced by ping differences. Shows which endpoint delivers updates to us faster.</p>
                             )}
                             {(category === 'network' || category === 'processing') && !isDelayStage(stage) && (
-                              <p className="text-xs mt-1 text-orange-500">⚡ Includes both endpoint performance AND network latency to us.</p>
+                              <p className="text-xs mt-1 text-orange-500">⚡ Includes node CPU advantage and network efficiency.</p>
                             )}
                           </TooltipContent>
                         </Tooltip>

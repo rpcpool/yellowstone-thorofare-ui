@@ -2,7 +2,6 @@ export const STAGE_COLORS = {
   download: "bg-blue-600",
   replay: "bg-green-600",
   confirmation: "bg-orange-600",
-  finalization: "bg-purple-600",
   waiting: "bg-gray-500",
 } as const;
 
