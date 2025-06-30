@@ -44,13 +44,13 @@ const STAGE_CATEGORIES = {
   processing: {
     label: "Local Processing",
     icon: Cpu,
-    description: "Time between status updates we receive (includes processing + network latency)",
+    description: "Time between status updates we receive (includes cpu processing time + network efficiency)",
     stages: ['download', 'replay']
   },
   consensus: {
     label: "Network Consensus",
     icon: Users,
-    description: "Waiting for network agreement (all endpoints must wait for the same consensus)",
+    description: "Waiting for network agreement per slot, time difference it took per endpoint to receive the votes from gossip",
     stages: ['confirmation_delay', 'finalization_delay']
   }
 }
@@ -540,7 +540,7 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
                 <p className="font-semibold mb-1">About delay metrics:</p>
                 <ul className="space-y-1 text-xs">
                   <li>• <span className="font-semibold">All timings are from YOUR perspective</span> as the benchmarking client</li>
-                  <li>• <span className="font-semibold">Reception/Processing Delays</span> = Difference in when YOU receive updates from each endpoint</li>
+                  <li>• <span className="font-semibold">First Shred/Processed Delays</span> = Difference in when YOU receive updates from each endpoint</li>
                   <li>• <span className="font-semibold">Download/Replay Times</span> = Include endpoint work + time for updates to reach you</li>
                   <li>• An endpoint with 100ms higher ping appears ~100ms slower even if nodes are identical</li>
                   <li>• Only compare endpoints with similar ping times for meaningful results</li>
