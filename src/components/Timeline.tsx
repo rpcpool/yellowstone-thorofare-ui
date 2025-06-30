@@ -153,7 +153,6 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
     const otherFirstShred = otherEndpoint.transitions.find(t => t.status === "FirstShredReceived")?.timestamp || 0
     const otherConfirmed = otherEndpoint.transitions.find(t => t.status === "Confirmed")?.timestamp || 0
 
-    // first shred delay
     if (endpoint.first_shred_delay_ms !== null && endpoint.first_shred_delay_ms !== undefined && endpoint.first_shred_delay_ms > 0) {
       stages.push({
         type: 'first_shred_delay',
@@ -219,7 +218,7 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
       })
     }
 
-    // detect parallel stages
+    /* parallel stage detection */
     for (let i = 0; i < stages.length; i++) {
       stages[i].parallelIndex = 0
       stages[i].parallel = false
@@ -274,7 +273,6 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
     return { start: firstShred, end: lastTime }
   }
 
-  // Calculate slot label positions to avoid overlap
   const calculateSlotLabelPositions = (slotsWithLanes: SlotWithLane[], pixelsPerMs: number, firstTimestamp: number) => {
     const labelPositions = new Map<number, number>()
     const sortedSlots = [...slotsWithLanes].sort((a, b) => a.startTime - b.startTime)
@@ -286,7 +284,6 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
       const defaultX = (startTime - firstTimestamp) * pixelsPerMs
       
       if (defaultX < lastLabelEnd + minLabelSpacing) {
-        // Label would overlap, skip it
         labelPositions.set(slot.slot, -1)
       } else {
         labelPositions.set(slot.slot, defaultX)
@@ -434,14 +431,12 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
   }, [onViewportChange])
 
   const handleStageMouseEnter = (e: React.MouseEvent, slot: number, endpoint: SlotDetail, endpointName: string, stageId: string) => {
-    // Clear any existing timeout
     if (tooltipTimeoutRef.current) {
       clearTimeout(tooltipTimeoutRef.current)
     }
     
     setHoveredStage(stageId)
     
-    // Add delay to show tooltip
     tooltipTimeoutRef.current = setTimeout(() => {
       setTooltip({
         visible: true,
@@ -457,12 +452,10 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
   const handleStageMouseLeave = () => {
     setHoveredStage(null)
     
-    // Clear timeout if tooltip hasn't shown yet
     if (tooltipTimeoutRef.current) {
       clearTimeout(tooltipTimeoutRef.current)
     }
     
-    // Add delay to hide tooltip
     tooltipTimeoutRef.current = setTimeout(() => {
       setTooltip(prev => ({
         ...prev,
@@ -580,6 +573,23 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
       >
+        {/* Static endpoint labels */}
+        <div className="sticky left-0 top-0 z-20 pointer-events-none">
+          <div className="absolute left-4 top-4 bg-card/95 backdrop-blur-sm px-3 py-1 rounded-md border shadow-sm pointer-events-auto">
+            <span className={cn("text-sm font-semibold", ENDPOINT_COLORS.ep1)}>
+              {endpointNames?.[0] || parseEndpointName(data.endpoints[0].endpoint)} ({maxEp1Lanes} lane{maxEp1Lanes > 1 ? 's' : ''})
+            </span>
+          </div>
+          <div 
+            className="absolute left-4 bg-card/95 backdrop-blur-sm px-3 py-1 rounded-md border shadow-sm pointer-events-auto"
+            style={{ top: `${ep1Height + 56 }px` }}
+          >
+            <span className={cn("text-sm font-semibold", ENDPOINT_COLORS.ep2)}>
+              {endpointNames?.[1] || parseEndpointName(data.endpoints[1].endpoint)} ({maxEp2Lanes} lane{maxEp2Lanes > 1 ? 's' : ''})
+            </span>
+          </div>
+        </div>
+
         <div style={{ 
           width: timelineWidth, 
           height: totalHeight, 
@@ -588,19 +598,13 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
         }}>
           {/* ep1 timeline */}
           <div className="absolute top-0 left-0 right-0" style={{ height: ep1Height }}>
-            <div className="absolute left-4 top-4 z-10">
-              <span className={cn("text-sm font-semibold", ENDPOINT_COLORS.ep1)}>
-                {endpointNames?.[0] || parseEndpointName(data.endpoints[0].endpoint)} ({maxEp1Lanes} lane{maxEp1Lanes > 1 ? 's' : ''})
-              </span>
-            </div>
-            
             {/* Lane backgrounds */}
             {Array.from({ length: maxEp1Lanes }).map((_, laneIndex) => (
               <div
                 key={`ep1-lane-${laneIndex}`}
                 className={cn(
                   "absolute left-0 right-0",
-                  laneIndex % 2 === 0 ? "bg-muted/5" : "bg-muted/10"
+                  laneIndex % 2 === 0 ? "bg-muted/10" : "bg-muted/20"
                 )}
                 style={{
                   top: `${TIMELINE_PADDING + SLOT_LABEL_HEIGHT + laneIndex * SLOT_HEIGHT}px`,
@@ -628,7 +632,7 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
                       right: 0
                     }}
                   >
-                    {/* slot divider and label */}
+                    {/* slot divider */}
                     <div
                       className="absolute top-0 bottom-0 border-l-2 border-primary/40"
                       style={{
@@ -638,7 +642,7 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
                     >
                       {labelX >= 0 && (
                         <span 
-                          className="absolute text-xs font-medium bg-card text-primary px-2 py-0.5 rounded-full border border-primary/30"
+                          className="absolute text-xs font-medium text-primary px-2 py-0.5 rounded-full border border-primary/30"
                           style={{
                             top: `${2}px`,
                             left: `${labelX - ((slot.endpoint1.transitions[0]?.timestamp || firstTimestamp) - firstTimestamp) * pixelsPerMs}px`
@@ -663,41 +667,24 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
               })}
           </div>
 
-          {/* Separator between endpoints */}
+          {/* Separator */}
           <div 
-            className="absolute left-0 right-0 bg-gradient-to-r from-transparent via-border to-transparent" 
+            className="absolute left-0 right-0 bg-gradient-to-r from-violet-900 via-border to-violet-500/50 border-t border-b border-border" 
             style={{ 
-              top: ep1Height, 
+              top: ep1Height + 40, 
               height: '2px' 
             }} 
           />
-          <div 
-            className="absolute left-0 right-0 flex items-center justify-center" 
-            style={{ 
-              top: ep1Height - 10, 
-              height: '20px' 
-            }}
-          >
-            <div className="bg-background px-4 text-xs text-muted-foreground font-medium">
-              Timeline Comparison
-            </div>
-          </div>
 
           {/* ep2 timeline */}
           <div className="absolute left-0 right-0" style={{ top: ep1Height + 40, height: ep2Height }}>
-            <div className="absolute left-4 top-4 z-10">
-              <span className={cn("text-sm font-semibold", ENDPOINT_COLORS.ep2)}>
-                {endpointNames?.[1] || parseEndpointName(data.endpoints[1].endpoint)} ({maxEp2Lanes} lane{maxEp2Lanes > 1 ? 's' : ''})
-              </span>
-            </div>
-            
             {/* Lane backgrounds */}
             {Array.from({ length: maxEp2Lanes }).map((_, laneIndex) => (
               <div
                 key={`ep2-lane-${laneIndex}`}
                 className={cn(
-                  "absolute left-0 right",
-                  laneIndex % 2 === 0 ? "bg-muted/5" : "bg-muted/10"
+                  "absolute left-0 right-0",
+                  laneIndex % 2 === 0 ? "bg-muted/10" : "bg-muted/20"
                 )}
                 style={{
                   top: `${TIMELINE_PADDING + SLOT_LABEL_HEIGHT + laneIndex * SLOT_HEIGHT}px`,
