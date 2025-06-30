@@ -183,13 +183,6 @@ function App() {
               initialSelectedId={selectedBenchmarkId}
               onNameChange={() => setRefreshKey(prev => prev + 1)}
             />
-            
-            <div className="text-center text-sm text-muted-foreground max-w-lg">
-              <p>
-                Run <code className="bg-muted px-2 py-1 rounded">grpc-bench</code> to generate benchmark data, 
-                then upload the JSON file to visualize the results.
-              </p>
-            </div>
           </div>
         ) : (
           // Show benchmark visualization when data is loaded

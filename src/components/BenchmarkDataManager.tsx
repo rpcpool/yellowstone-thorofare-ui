@@ -348,7 +348,7 @@ export function BenchmarkDataManager({
                 {isDragging ? "Drop your file here" : "Drop benchmark JSON or click to browse"}
               </p>
               <p className="text-xs text-muted-foreground">
-                Supports .json files from grpc-bench tool
+                Supports .json files from thorofare CLI
               </p>
             </div>
           </div>
@@ -530,11 +530,19 @@ export function BenchmarkDataManager({
               <div className="text-sm text-muted-foreground space-y-2">
                 <p className="font-medium">How to get started:</p>
                 <ol className="text-left max-w-sm mx-auto space-y-1">
-                  <li>1. Run <code className="text-xs bg-muted px-1 py-0.5 rounded">grpc-bench</code> tool</li>
+                  <li>1. Run <code className="text-xs bg-muted px-1 py-0.5 rounded">thorofare</code> CLI</li>
                   <li>2. Upload the generated JSON file here</li>
                   <li>3. Analyze endpoint performance visually</li>
                 </ol>
               </div>
+              <a 
+                href="https://github.com/rpcpool/yellowstone-thorofare" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+              >
+                View documentation on GitHub →
+              </a>
             </div>
           )}
         </div>

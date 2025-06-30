@@ -1,7 +1,7 @@
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import type { BenchmarkResult } from "@/lib/types"
-import { Database, Activity, Settings, FileJson, Clock, Zap, TrendingUp, FolderOpen } from "lucide-react"
+import { Activity, Settings, FileJson, Clock, FolderOpen, Cpu } from "lucide-react"
 import { useState } from "react"
 import { 
   Collapsible, 
@@ -44,7 +44,7 @@ export function BenchmarkHeader({
 }: BenchmarkHeaderProps) {
   const [editingEndpoint, setEditingEndpoint] = useState<0 | 1 | null>(null)
   const [editingName, setEditingName] = useState("")
-  const { metadata, endpoints, version, with_load, grpc_config, endpoint1_summary, endpoint2_summary } = data
+  const { metadata, endpoints, version, with_load, grpc_config} = data
   const [isConfigOpen, setIsConfigOpen] = useState(false)
   const [isDataManagerOpen, setIsDataManagerOpen] = useState(false)
   
@@ -53,33 +53,6 @@ export function BenchmarkHeader({
     return `${(ms / 1000).toFixed(2)}s`
   }
   
-  // Calculate which endpoint was generally faster
-  const getFasterEndpoint = () => {
-    const ep1Faster = [
-      endpoint1_summary.first_shred_delay.p50 < endpoint2_summary.first_shred_delay.p50,
-      endpoint1_summary.download_time.p50 < endpoint2_summary.download_time.p50,
-      endpoint1_summary.replay_time.p50 < endpoint2_summary.replay_time.p50,
-      endpoint1_summary.processing_delay.p50 < endpoint2_summary.processing_delay.p50,
-    ].filter(Boolean).length
-    
-    const ep2Faster = 4 - ep1Faster
-    
-    if (ep1Faster > ep2Faster) return { index: 0, name: getShortName(endpoints[0].endpoint) }
-    if (ep2Faster > ep1Faster) return { index: 1, name: getShortName(endpoints[1].endpoint) }
-    return null
-  }
-  
-  const getShortName = (endpoint: string) => {
-    // Find which endpoint this is
-    const idx = endpoints.findIndex(e => e.endpoint === endpoint)
-    if (idx !== -1 && endpointNames?.[idx]) {
-      return endpointNames[idx]!
-    }
-    return parseEndpointName(endpoint);
-  }
-  
-  const fasterEndpoint = getFasterEndpoint()
-
   // Handle benchmark change and close dialog
   const handleBenchmarkChangeInternal = (data: BenchmarkResult | null, id?: string) => {
     onBenchmarkChange(data, id)
@@ -92,23 +65,34 @@ export function BenchmarkHeader({
     <div className="space-y-4 flex-1">
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-2">
-          {/* Logo - update the src path to match your file location */}
           <img 
             src="/logo.svg" 
             alt="Triton One" 
-            className="h-20 sm:h-24 lg:h-28 w-auto"
+            className="h-16 sm:h-20 md:h-24 lg:h-28 w-auto"
           />
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-[#DA05E2] to-[#2C0FDF] bg-clip-text text-transparent">
+            <h1 className="text-base sm:text-xl md:text-2xl lg:text-3xl font-bold bg-gradient-to-r from-[#DA05E2] to-[#2C0FDF] bg-clip-text text-transparent">
               Yellowstone Thorofare
             </h1>
-            <p className="text-sm text-muted-foreground">gRPC Endpoint Benchmark Tool</p>
+            <p className="text-xs sm:text-sm text-muted-foreground">gRPC Endpoint Benchmark Visualizer</p>
+            <a 
+              href="https://github.com/rpcpool/yellowstone-thorofare" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-xs text-primary hover:underline inline-flex items-center gap-1 mt-1"
+            >
+              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+              </svg>
+              <span className="hidden sm:inline">GitHub</span>
+            </a>
           </div>
         </div>
         <div className="text-right space-y-1">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Database className="h-4 w-4" />
-            <span>Version: {version}</span>
+          <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground justify-end">
+            <Cpu className="h-3 w-3 sm:h-4 sm:w-4" />
+            <span className="hidden sm:inline">Thorofare CLI Version: v{version}</span>
+            <span className="sm:hidden">v{version}</span>
           </div>
           {with_load && (
             <Badge variant="secondary" className="text-xs">
@@ -119,7 +103,6 @@ export function BenchmarkHeader({
         </div>
       </div>
       
-      {/* Current benchmark info with integrated button */}
       {currentBenchmarkName && (
         <Card className="p-4 bg-gradient-to-r from-[#DA05E2]/5 to-[#2C0FDF]/5 border-[#8424D1]/20">
           <div className="flex items-center justify-between flex-wrap gap-3">
@@ -157,22 +140,12 @@ export function BenchmarkHeader({
                 <span className="sm:hidden">{new Date(metadata.benchmark_start_time).toLocaleDateString('en', { month: 'short', day: 'numeric' })}</span>
               </div>
               <div className="flex items-center gap-2 text-muted-foreground">
-                <Zap className="h-4 w-4" />
+                <Clock className="h-4 w-4" />
                 <span>{formatDuration(metadata.duration_ms)}</span>
               </div>
               <Badge variant="secondary" className="text-xs">
                 {metadata.compared_slots} slots
               </Badge>
-              {fasterEndpoint && (
-                <Badge 
-                  variant="outline" 
-                  className="text-xs border-green-600/50 text-green-600 flex items-center gap-1"
-                >
-                  <TrendingUp className="h-3 w-3" />
-                  <span className="hidden sm:inline">{fasterEndpoint.name} faster overall</span>
-                  <span className="sm:hidden">{fasterEndpoint.name} faster</span>
-                </Badge>
-              )}
             </div>
           </div>
         </Card>
@@ -254,7 +227,6 @@ export function BenchmarkHeader({
                 </div>
               </div>
               
-              {/* Custom name with edit functionality */}
               <div className="flex items-center gap-2 mb-2">
                 {isEditing ? (
                   <>
@@ -319,7 +291,6 @@ export function BenchmarkHeader({
                 )}
               </div>
               
-              {/* Full URL with protocol */}
               <p className="text-xs text-muted-foreground break-all font-mono mb-1">
                 {endpoint.endpoint}
               </p>
@@ -349,7 +320,6 @@ export function BenchmarkHeader({
         })}
       </div>
 
-      {/* gRPC Configuration (Collapsible) */}
       <Collapsible open={isConfigOpen} onOpenChange={setIsConfigOpen}>
         <CollapsibleTrigger asChild>
           <Button variant="outline" size="sm" className="w-full">

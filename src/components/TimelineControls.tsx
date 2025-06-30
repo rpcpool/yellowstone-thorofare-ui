@@ -26,7 +26,6 @@ const stageLabels = {
   download: 'Download',
   replay: 'Replay',
   confirmation: 'Confirmation',
-  finalization: 'Finalization'
 }
 
 export function TimelineControls({
@@ -137,7 +136,7 @@ export function TimelineControls({
           className="gap-2"
         >
           <Layers className="h-4 w-4" />
-          Timeline Stages ({visibleCount}/4)
+          Timeline Stages ({visibleCount}/{Object.keys(stageLabels).length})
         </Button>
         
         {isStageSelectOpen && (

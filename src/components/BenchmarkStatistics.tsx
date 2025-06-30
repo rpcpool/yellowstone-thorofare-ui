@@ -38,20 +38,20 @@ const STAGE_CATEGORIES = {
   network: {
     label: "Network Performance",
     icon: Network,
-    description: "How quickly endpoints receive data from the network",
+    description: "How quickly updates reach us from each endpoint (includes network latency)",
     stages: ['first_shred_delay', 'processing_delay']
   },
   processing: {
     label: "Local Processing",
     icon: Cpu,
-    description: "How fast endpoints process slots locally",
+    description: "Time between status updates we receive (includes processing + network latency)",
     stages: ['download', 'replay']
   },
   consensus: {
     label: "Network Consensus",
     icon: Users,
-    description: "Depends on overall network agreement, not individual endpoint speed",
-    stages: ['confirmation', 'finalization']
+    description: "Waiting for network agreement (all endpoints must wait for the same consensus)",
+    stages: ['confirmation', 'finalization', 'confirmation_delay', 'finalization_delay']
   }
 }
 
@@ -105,7 +105,9 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
       'download',
       'replay',
       'confirmation',
-      'finalization'
+      'finalization',
+      'confirmation_delay',
+      'finalization_delay'
     ] as const
     
     const stats: Record<string, EndpointStageStats> = {}
@@ -127,6 +129,20 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
           .sort((a, b) => a - b)
         ep2Values = data.slots
           .map(slot => slot.endpoint2.processing_delay_ms || 0)
+          .sort((a, b) => a - b)
+      } else if (stage === 'confirmation_delay') {
+        ep1Values = data.slots
+          .map(slot => slot.endpoint1.confirmation_delay_ms || 0)
+          .sort((a, b) => a - b)
+        ep2Values = data.slots
+          .map(slot => slot.endpoint2.confirmation_delay_ms || 0)
+          .sort((a, b) => a - b)
+      } else if (stage === 'finalization_delay') {
+        ep1Values = data.slots
+          .map(slot => slot.endpoint1.finalization_delay_ms || 0)
+          .sort((a, b) => a - b)
+        ep2Values = data.slots
+          .map(slot => slot.endpoint2.finalization_delay_ms || 0)
           .sort((a, b) => a - b)
       } else {
         ep1Values = data.slots
@@ -194,7 +210,6 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
         const variance = values.reduce((a, b) => a + Math.pow(b.value - mean, 2), 0) / values.length
         const stdDev = Math.sqrt(variance)
 
-        // z-score > 2.5 = outlier
         values.forEach(({ slot, value }) => {
           const zscore = Math.abs((value - mean) / stdDev)
           if (zscore > 2.5 && value > mean) {
@@ -221,20 +236,25 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
   const formatPercentage = (value: number) => `${value.toFixed(1)}%`
 
   const stageDescriptions = {
-    first_shred_delay: "When endpoints receive data at different times, this shows the delay of the slower endpoint",
-    processing_delay: "Time difference between when endpoints finish processing the same slot",
-    download: "Time to receive all pieces of data (shreds) that make up a slot",
-    confirmation: "Time until the network agrees this slot is valid (not endpoint-dependent)",
-    finalization: "Time until the slot is permanently recorded (not endpoint-dependent)"
+    first_shred_delay: "Time difference between when we receive 'first shred' notifications from each endpoint. Includes network latency (ping time).",
+    processing_delay: "Time difference between when we receive 'processed' notifications from each endpoint. Includes network latency (ping time).",
+    download: "Time between receiving 'FirstShredReceived' and 'Completed' updates from each endpoint. Affected by endpoint's download speed AND network latency to us.",
+    replay: "Time between receiving 'CreatedBank' and 'Processed' updates from each endpoint. Affected by endpoint's CPU speed AND network latency to us.",
+    confirmation: "Time between receiving 'Processed' and 'Confirmed' updates. Shows how long each endpoint waits for network consensus.",
+    finalization: "Time between receiving 'Confirmed' and 'Finalized' updates. Shows how long until permanent commitment.",
+    confirmation_delay: "Time difference between when we receive confirmation updates from each endpoint. Heavily influenced by ping differences.",
+    finalization_delay: "Time difference between when we receive finalization updates from each endpoint. Heavily influenced by ping differences."
   }
 
   const stageLabels = {
     first_shred_delay: "Reception Delay (First Shred)",
-    processing_delay: "Processing Delay",
-    download: "Download Time",
-    replay: "Transaction Replay",
-    confirmation: "Network Confirmation",
-    finalization: "Network Finalization"
+    processing_delay: "Processing Completion Delay",
+    download: "Download Duration (observed)",
+    replay: "Replay Duration (observed)",
+    confirmation: "Awaiting Confirmation",
+    finalization: "Awaiting Finalization",
+    confirmation_delay: "Confirmation Update Delay",
+    finalization_delay: "Finalization Update Delay"
   }
 
   const getEndpointShortName = (idx: number) => {
@@ -251,7 +271,6 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
         <h2 className="text-2xl font-bold">Performance Analysis</h2>
         
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* first to receive */}
           <Card className="p-4">
             <div className="flex items-center justify-between mb-2">
               <Zap className="h-4 w-4 text-muted-foreground" />
@@ -260,18 +279,18 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
                   <Info className="h-3 w-3 text-muted-foreground" />
                 </TooltipTrigger>
                 <TooltipContent className="max-w-xs">
-                  <p className="text-xs">Shows which endpoint typically receives new blockchain data first. This indicates network proximity and routing efficiency.</p>
+                  <p className="text-xs">Shows which endpoint typically delivers new blockchain data to us first. Heavily influenced by ping time - the endpoint with lower ping has a significant advantage.</p>
                 </TooltipContent>
               </Tooltip>
             </div>
-            <p className="text-sm text-muted-foreground">First to Receive</p>
+            <p className="text-sm text-muted-foreground">First to Deliver Updates</p>
             <div className="space-y-1">
               <div className="flex justify-between text-sm">
-                <span style={{ color: EP1_COLOR }}>{getEndpointShortName(0)} First:</span>
+                <span style={{ color: EP1_COLOR }}>{getEndpointShortName(0)} First to us:</span>
                 <span className="font-mono">{formatPercentage(firstSeenStats.ep1Percentage)}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span style={{ color: EP2_COLOR }}>{getEndpointShortName(1)} First:</span>
+                <span style={{ color: EP2_COLOR }}>{getEndpointShortName(1)} First to us:</span>
                 <span className="font-mono">{formatPercentage(firstSeenStats.ep2Percentage)}</span>
               </div>
               <div className="flex justify-between text-sm">
@@ -281,7 +300,6 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
             </div>
           </Card>
 
-          {/* reception delay */}
           <Card className="p-4">
             <div className="flex items-center justify-between mb-2">
               <Clock className="h-4 w-4 text-muted-foreground" />
@@ -290,7 +308,7 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
                   <Info className="h-3 w-3 text-muted-foreground" />
                 </TooltipTrigger>
                 <TooltipContent className="max-w-xs">
-                  <p className="text-xs">Average time the slower endpoint waits after the faster one receives data. Lower is better. Shows network latency differences.</p>
+                  <p className="text-xs">Average additional time before we receive data from the slower endpoint. Includes both actual delay AND ping time differences. An endpoint with higher ping will always show higher delay here.</p>
                 </TooltipContent>
               </Tooltip>
             </div>
@@ -305,12 +323,11 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
                 <span className="font-mono">{formatDuration(firstSeenStats.avgDelayTime.ep2)}</span>
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                When slower to receive
+                Additional latency when delivering updates later
               </p>
             </div>
           </Card>
 
-          {/* outliers */}
           <Card className="p-4">
             <div className="flex items-center justify-between mb-2">
               <AlertCircle className="h-4 w-4 text-muted-foreground" />
@@ -342,7 +359,25 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
           </Card>
         </div>
 
-        {/* stage performance grouped by category */}
+        <Card className="p-4 bg-yellow-500/10 border-yellow-500/30">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="h-4 w-4 text-yellow-600 mt-0.5 flex-shrink-0" />
+            <div className="text-sm space-y-2">
+              <p className="font-semibold text-yellow-800">Critical: All metrics are affected by network latency (ping)</p>
+              <div className="text-xs text-yellow-700 space-y-1">
+                <p>
+                  <span className="font-semibold">{getEndpointShortName(0)}</span> ping: <span className="font-mono">{data.endpoints[0].avg_ping_ms.toFixed(1)}ms</span> | 
+                  <span className="font-semibold ml-2">{getEndpointShortName(1)}</span> ping: <span className="font-mono">{data.endpoints[1].avg_ping_ms.toFixed(1)}ms</span>
+                  <span className="ml-2">({Math.abs(data.endpoints[0].avg_ping_ms - data.endpoints[1].avg_ping_ms).toFixed(1)}ms difference)</span>
+                </p>
+                <p>• We measure when updates reach us (the benchmarking client), NOT when endpoints actually receive them</p>
+                <p>• An endpoint with {Math.abs(data.endpoints[0].avg_ping_ms - data.endpoints[1].avg_ping_ms).toFixed(0)}ms higher ping will appear ~{Math.abs(data.endpoints[0].avg_ping_ms - data.endpoints[1].avg_ping_ms).toFixed(0)}ms slower on most metrics</p>
+                <p>• Only meaningful comparisons are between endpoints with similar ping times</p>
+              </div>
+            </div>
+          </div>
+        </Card>
+
         <div className="space-y-6">
           {Object.entries(STAGE_CATEGORIES).map(([category, categoryInfo]) => {
             const Icon = categoryInfo.icon
@@ -351,6 +386,9 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
             )
             
             if (relevantStages.length === 0) return null
+
+            const isDelayStage = (stage: string) => 
+              stage.endsWith('_delay') && stage !== 'download_delay' && stage !== 'replay_delay'
             
             return (
               <div key={category} className="space-y-3">
@@ -369,7 +407,7 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-2 gap-4">
                   {relevantStages.map(([stage, stats]) => (
-                    <Card key={stage} className={`p-4 ${category === 'consensus' ? 'opacity-75' : ''}`}>
+                    <Card key={stage} className={`p-4 ${category === 'consensus' && !isDelayStage(stage) ? 'opacity-75' : ''}`}>
                       <div className="flex items-center justify-between mb-3">
                         <h4 className="font-semibold text-sm">
                           {stageLabels[stage as keyof typeof stageLabels]}
@@ -380,8 +418,14 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
                           </TooltipTrigger>
                           <TooltipContent className="max-w-xs">
                             <p className="text-xs">{stageDescriptions[stage as keyof typeof stageDescriptions]}</p>
-                            {category === 'consensus' && (
-                              <p className="text-xs mt-1 text-yellow-500">⚠️ This metric depends on overall network consensus, not individual endpoint performance.</p>
+                            {category === 'consensus' && !isDelayStage(stage) && (
+                              <p className="text-xs mt-1 text-yellow-500">⚠️ This shows waiting time for network consensus, not endpoint performance.</p>
+                            )}
+                            {isDelayStage(stage) && (
+                              <p className="text-xs mt-1 text-blue-500">ℹ️ Heavily influenced by ping differences. Shows which endpoint delivers updates to us faster.</p>
+                            )}
+                            {(category === 'network' || category === 'processing') && !isDelayStage(stage) && (
+                              <p className="text-xs mt-1 text-orange-500">⚡ Includes both endpoint performance AND network latency to us.</p>
                             )}
                           </TooltipContent>
                         </Tooltip>
@@ -435,8 +479,7 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
                         </div>
                       </div>
                       
-                      {/* only show differences for performance metrics */}
-                      {category !== 'consensus' && (
+                      {(category !== 'consensus' || isDelayStage(stage)) && (
                         <div className="pt-2 border-t">
                           <div className="text-xs space-y-1">
                             <div className="flex justify-between">
@@ -478,7 +521,6 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
           })}
         </div>
 
-        {/* understanding metrics */}
         <Card className="p-4 bg-muted/50">
           <div className="flex items-start gap-2">
             <Info className="h-4 w-4 text-muted-foreground mt-0.5" />
@@ -496,15 +538,26 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
               <div>
                 <p className="font-semibold mb-1">Performance categories:</p>
                 <ul className="space-y-1 text-xs">
-                  <li>• <span className="font-semibold">Network Performance</span> = How fast data arrives from the network</li>
-                  <li>• <span className="font-semibold">Local Processing</span> = How fast the endpoint processes data</li>
-                  <li>• <span className="font-semibold">Network Consensus</span> = Depends on the entire network, not endpoint speed</li>
+                  <li>• <span className="font-semibold">Network Performance</span> = How fast updates about data arrival reach us</li>
+                  <li>• <span className="font-semibold">Local Processing</span> = How fast we receive processing status updates</li>
+                  <li>• <span className="font-semibold">Network Consensus</span> = How long endpoints wait for network agreement</li>
+                </ul>
+              </div>
+
+              <div>
+                <p className="font-semibold mb-1">About delay metrics:</p>
+                <ul className="space-y-1 text-xs">
+                  <li>• <span className="font-semibold">All timings are from YOUR perspective</span> as the benchmarking client</li>
+                  <li>• <span className="font-semibold">Reception/Processing Delays</span> = Difference in when YOU receive updates from each endpoint</li>
+                  <li>• <span className="font-semibold">Download/Replay Times</span> = Include endpoint work + time for updates to reach you</li>
+                  <li>• An endpoint with 100ms higher ping appears ~100ms slower even if nodes are identical</li>
+                  <li>• Only compare endpoints with similar ping times for meaningful results</li>
                 </ul>
               </div>
               
               <p className="text-xs text-yellow-600">
-                ⚠️ <span className="font-semibold">Important:</span> Only Network and Processing metrics indicate endpoint performance. 
-                Consensus metrics show network-wide agreement timing and don't reflect individual endpoint quality.
+                ⚠️ <span className="font-semibold">Remember:</span> We measure when updates reach the benchmark client, not actual endpoint performance. 
+                Network latency (ping) significantly affects all measurements. The endpoint with lower ping has an inherent advantage in these metrics.
               </p>
             </div>
           </div>
