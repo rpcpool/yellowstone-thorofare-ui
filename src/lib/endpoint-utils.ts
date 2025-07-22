@@ -6,12 +6,16 @@ interface ParsedVersion {
   git?: string;
 }
 
-export const parseVersion = (versionString: string): ParsedVersion => {
-  try {
-    // Try to parse as JSON
-    const parsed = JSON.parse(versionString);
+export const parseVersion = (versionString?: string): ParsedVersion => {
+  if (!versionString) {
+    return {
+      version: "Unknown",
+      solana: "Unknown",
+    };
+  }
 
-    // Handle nested version structure
+  try {
+    const parsed = JSON.parse(versionString);
     const versionData = parsed.version || parsed;
     const extraData = parsed.extra || {};
 
@@ -24,7 +28,6 @@ export const parseVersion = (versionString: string): ParsedVersion => {
       git: versionData.git,
     };
   } catch {
-    // If not JSON, try to extract version from string
     const versionMatch = versionString.match(/v?(\d+\.\d+\.\d+)/);
     return {
       version: versionMatch ? versionMatch[1] : "Unknown",
@@ -32,6 +35,7 @@ export const parseVersion = (versionString: string): ParsedVersion => {
     };
   }
 };
+
 
 export const formatVersionDisplay = (versionString: string): string => {
   const parsed = parseVersion(versionString);
