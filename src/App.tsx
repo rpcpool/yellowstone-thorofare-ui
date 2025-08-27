@@ -3,6 +3,7 @@ import { BenchmarkHeader } from "@/components/BenchmarkHeader"
 import { TimelineControls, type StageVisibility } from "@/components/TimelineControls"
 import { Timeline } from "@/components/Timeline"
 import { BenchmarkStatistics } from "@/components/BenchmarkStatistics"
+import { AccountUpdateChart } from "@/components/AccountUpdateChart"
 import { BenchmarkDataManager } from "@/components/BenchmarkDataManager"
 import type { BenchmarkResult } from "./lib/types"
 
@@ -220,6 +221,11 @@ function App() {
               viewportOffset={viewportOffset}
               onViewportChange={setViewportOffset}
               visibleStages={visibleStages}
+              endpointNames={currentEndpointNames}
+            />
+            
+            <AccountUpdateChart
+              data={benchmarkData}
               endpointNames={currentEndpointNames}
             />
           </div>
