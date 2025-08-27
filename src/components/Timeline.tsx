@@ -1,9 +1,10 @@
 import { useRef, useEffect, useState, useCallback } from "react"
-import type { BenchmarkResult, SlotDetail, SlotComparison } from "@/lib/types"
+import type { BenchmarkResult, SlotDetail, SlotComparison, AccountUpdateDetail } from "@/lib/types"
 import { STAGE_COLORS, STAGE_LABELS, ENDPOINT_COLORS, PIXELS_PER_MS, STAGE_HEIGHT, STAGE_SPACING } from "@/lib/constants"
 import { parseEndpointName } from "@/lib/endpoint-utils"
 import { cn } from "@/lib/utils"
 import { SlotTooltip } from "./SlotTooltip"
+import { AccountUpdateTooltip } from "./AccountUpdateTooltip"
 import type { StageVisibility } from "./TimelineControls"
 
 interface TimelineProps {
@@ -22,6 +23,14 @@ interface TooltipState {
   slot: number
   endpoint: SlotDetail | null
   endpointName: string
+}
+
+interface AccountUpdateTooltipState {
+  visible: boolean
+  x: number
+  y: number
+  accounts: AccountUpdateDetail[]
+  baseTime: number
 }
 
 interface ProcessedStage {
@@ -60,10 +69,6 @@ const TimeAxis: React.FC<TimeAxisProps> = ({
   viewportOffset = 0,
   windowWidth
 }) => {
-  const pixelsPerMs = PIXELS_PER_MS * zoom
-  const tickInterval = getTickInterval(duration / zoom)
-  const ticks = []
-  
   const getContainerPercentage = () => {
     if (windowWidth < 640) return 0.95
     if (windowWidth < 1024) return 0.90
@@ -72,6 +77,10 @@ const TimeAxis: React.FC<TimeAxisProps> = ({
   }
   
   const containerWidth = windowWidth * getContainerPercentage() - 32
+  const pixelsPerMs = PIXELS_PER_MS * zoom
+  const visibleDuration = containerWidth / pixelsPerMs
+  const tickInterval = getTickInterval(visibleDuration)
+  const ticks = []
   
   for (let time = 0; time <= duration; time += tickInterval) {
     const x = time * pixelsPerMs - viewportOffset
@@ -105,14 +114,23 @@ function getTickInterval(visibleDuration: number): number {
   if (visibleDuration > 500) return 100
   if (visibleDuration > 200) return 50
   if (visibleDuration > 100) return 20
-  return 10
+  if (visibleDuration > 50) return 10
+  if (visibleDuration > 20) return 5
+  if (visibleDuration > 10) return 2
+  return 1
 }
 
 function formatTime(ms: number): string {
   if (ms >= 1000) {
     return `${(ms / 1000).toFixed(1)}s`
   }
-  return `${ms}ms`
+  if (ms >= 100) {
+    return `${Math.round(ms)}ms`
+  }
+  if (ms >= 10) {
+    return `${ms.toFixed(1)}ms`
+  }
+  return `${ms.toFixed(2)}ms`
 }
 
 export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, visibleStages, endpointNames }: TimelineProps) {
@@ -122,6 +140,7 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
   const [windowWidth, setWindowWidth] = useState(window.innerWidth)
   const [hoveredStage, setHoveredStage] = useState<string | null>(null)
   const tooltipTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const accountTooltipTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const [tooltip, setTooltip] = useState<TooltipState>({
     visible: false,
     x: 0,
@@ -130,6 +149,14 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
     endpoint: null,
     endpointName: ''
   })
+  const [accountTooltip, setAccountTooltip] = useState<AccountUpdateTooltipState>({
+    visible: false,
+    x: 0,
+    y: 0,
+    accounts: [],
+    baseTime: 0
+  })
+  const [hoveredAccountSignature, setHoveredAccountSignature] = useState<string | null>(null)
 
   useEffect(() => {
     const handleResize = () => {
@@ -464,6 +491,45 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
     }, 100)
   }
 
+  const handleAccountMouseEnter = (e: React.MouseEvent, accounts: AccountUpdateDetail[], baseTime: number) => {
+    if (accountTooltipTimeoutRef.current) {
+      clearTimeout(accountTooltipTimeoutRef.current)
+    }
+    
+    accountTooltipTimeoutRef.current = setTimeout(() => {
+      setAccountTooltip({
+        visible: true,
+        x: e.clientX,
+        y: e.clientY,
+        accounts,
+        baseTime
+      })
+    }, 200)
+  }
+
+  const handleAccountMouseLeave = () => {
+    if (accountTooltipTimeoutRef.current) {
+      clearTimeout(accountTooltipTimeoutRef.current)
+    }
+    
+    accountTooltipTimeoutRef.current = setTimeout(() => {
+      setAccountTooltip(prev => ({
+        ...prev,
+        visible: false
+      }))
+    }, 100)
+  }
+
+  const handleAccountTooltipMouseEnter = () => {
+    if (accountTooltipTimeoutRef.current) {
+      clearTimeout(accountTooltipTimeoutRef.current)
+    }
+  }
+
+  const handleAccountTooltipMouseLeave = () => {
+    handleAccountMouseLeave()
+  }
+
   const renderAccountUpdates = (
     endpoint: SlotDetail,
     baseTime: number,
@@ -474,132 +540,113 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
       return null
     }
 
-    // Sort account updates by timestamp for better visual consistency
-    const sortedAccounts = [...endpoint.account_updates].sort((a, b) => a.timestamp - b.timestamp)
-    const delayedCount = sortedAccounts.filter(a => a.delay_ms && a.delay_ms > 0).length
+    const sortedAccounts = [...endpoint.account_updates]
+      .sort((a, b) => a.timestamp - b.timestamp)
+    
+    const GROUPING_THRESHOLD = 5
+    const groupedUpdates: { accounts: typeof sortedAccounts, x: number, hasDelays: boolean }[] = []
+    
+    sortedAccounts.forEach(account => {
+      const x = (account.timestamp - baseTime) * scale
+      
+      const existingGroup = groupedUpdates.find(group => 
+        Math.abs(group.x - x) < GROUPING_THRESHOLD * scale
+      )
+      
+      if (existingGroup) {
+        existingGroup.accounts.push(account)
+        if (account.delay_ms != null && Number(account.delay_ms) > 0) {
+          existingGroup.hasDelays = true
+        }
+      } else {
+        groupedUpdates.push({
+          accounts: [account],
+          x: x,
+          hasDelays: account.delay_ms != null && Number(account.delay_ms) > 0
+        })
+      }
+    })
     
     return (
       <>
-        {/* Account summary badge */}
-        {sortedAccounts.length > 0 && (
-          <div
-            className="absolute text-[10px] font-medium bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded-md border border-gray-300 dark:border-gray-600"
-            style={{
-              top: `${yOffset + 85}px`,
-              left: '5px',
-              zIndex: 5
-            }}
-          >
-            {sortedAccounts.length} acct{sortedAccounts.length !== 1 ? 's' : ''}
-            {delayedCount > 0 && (
-              <span className="text-red-500 ml-1">
-                ({delayedCount} delayed)
-              </span>
-            )}
-          </div>
-        )}
-        
         <div
           className="absolute"
           style={{
-            top: `${yOffset + 105}px`, 
+            top: `${yOffset + 110}px`, 
             height: '20px',
             left: 0,
             right: 0,
             pointerEvents: 'none'
           }}
         >
-          {sortedAccounts.map((account, idx) => {
-          const x = (account.timestamp - baseTime) * scale
-          const hasDelay = account.delay_ms && account.delay_ms > 0
-          
-          return (
-            <div
-              key={`account-${idx}-${account.pubkey}-${account.write_version}`}
-              className="absolute group hover:!z-[10000]"
-              style={{
-                left: `${x}px`,
-                top: '50%',
-                transform: 'translateY(-50%)',
-                pointerEvents: 'auto'
-              }}
-            >
-              {/* Invisible hover area extension to keep card visible */}
-              <div 
-                className="absolute opacity-0 pointer-events-auto"
+          {groupedUpdates.map((group, groupIdx) => {
+            const isMultiple = group.accounts.length > 1
+            const hasOnlyDelays = group.accounts.every(a => a.delay_ms != null && Number(a.delay_ms) > 0)
+            const hasOnlyOnTime = group.accounts.every(a => a.delay_ms == null || Number(a.delay_ms) === 0)
+            const hasMixed = !hasOnlyDelays && !hasOnlyOnTime
+            
+            const isHighlighted = group.accounts.some(account => 
+              hoveredAccountSignature && account.tx_signature === hoveredAccountSignature
+            )
+            
+            return (
+              <div
+                key={`account-group-${groupIdx}`}
+                className="absolute"
                 style={{
-                  top: '-40px',
-                  bottom: '-10px',
-                  left: '-10px',
-                  right: '-10px',
-                  zIndex: 9998
+                  left: `${group.x}px`,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  pointerEvents: 'auto',
+                  zIndex: hasOnlyDelays ? 22 : hasOnlyOnTime ? 20 : 21
                 }}
-              />
-              
-              {/* Vertical connector line that appears on hover */}
-              <div 
-                className="absolute w-px bg-gray-400 opacity-0 group-hover:opacity-30 transition-opacity pointer-events-none"
-                style={{
-                  top: '-33px',
-                  bottom: '12px',
-                  left: '4px'
+                onMouseEnter={(e) => {
+                  e.stopPropagation()
+                  handleAccountMouseEnter(e, group.accounts, baseTime)
+                  // highlight corresponding accounts
+                  if (group.accounts.length > 0) {
+                    setHoveredAccountSignature(group.accounts[0].tx_signature)
+                  }
                 }}
-              />
-              
-              <div 
-                className={cn(
-                  "rounded-full transition-all cursor-pointer hover:scale-125 relative",
-                  hasDelay ? "bg-red-500 ring-1 ring-red-400/40" : "bg-emerald-500"
-                )}
-                style={{
-                  width: '8px',
-                  height: '8px',
-                  opacity: hasDelay ? 0.9 : 0.7,
-                  boxShadow: hasDelay ? '0 0 6px rgba(239, 68, 68, 0.4)' : '0 0 4px rgba(16, 185, 129, 0.3)',
-                  position: 'relative',
-                  zIndex: 10
+                onMouseLeave={(e) => {
+                  e.stopPropagation()
+                  handleAccountMouseLeave()
+                  setHoveredAccountSignature(null)
                 }}
-              />
-              
-              {/* Hover card */}
-              <div className="absolute bottom-full left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-auto" style={{ zIndex: 9999, marginBottom: '8px' }}>
-                <div className="bg-card/95 backdrop-blur-sm border rounded-lg shadow-lg p-2 min-w-[200px] text-xs relative">
-                  <div className="space-y-1">
-                    <div className="font-semibold text-foreground">Account Update</div>
-                    <div className="text-muted-foreground">
-                      <span className="font-mono">{account.pubkey.slice(0, 8)}...{account.pubkey.slice(-4)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Write Version:</span>
-                      <span className="font-mono">{account.write_version}</span>
-                    </div>
-                    {hasDelay && (
-                      <div className="flex justify-between text-red-500">
-                        <span>Delay:</span>
-                        <span className="font-semibold">{account.delay_ms?.toFixed(2)}ms</span>
-                      </div>
-                    )}
-                    <div className="pt-1 border-t">
-                      <a 
-                        href={`https://solscan.io/tx/${account.tx_signature}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-500 hover:text-blue-400 flex items-center gap-1 pointer-events-auto"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <span>View on Solscan</span>
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                        </svg>
-                      </a>
-                    </div>
-                  </div>
+              >
+                <div 
+                  className={cn(
+                    "rounded-full transition-all cursor-pointer hover:scale-125 relative",
+                    hasOnlyDelays ? "bg-red-500" : hasOnlyOnTime ? "bg-emerald-500" : "bg-orange-500",
+                    isMultiple && "ring-2",
+                    hasOnlyDelays && isMultiple && "ring-red-400",
+                    hasOnlyOnTime && isMultiple && "ring-emerald-400",
+                    hasMixed && isMultiple && "ring-orange-400",
+                    isHighlighted && "ring-4 ring-blue-400 scale-150"
+                  )}
+                  style={{
+                    width: isMultiple ? '12px' : '8px',
+                    height: isMultiple ? '12px' : '8px',
+                    opacity: hasOnlyOnTime ? 0.7 : 0.9,
+                    boxShadow: isHighlighted 
+                      ? '0 0 12px rgba(59, 130, 246, 0.8)' 
+                      : hasOnlyDelays ? '0 0 6px rgba(239, 68, 68, 0.4)' : 
+                        hasOnlyOnTime ? '0 0 4px rgba(16, 185, 129, 0.3)' : 
+                        '0 0 5px rgba(251, 146, 60, 0.4)',
+                    position: 'relative',
+                    zIndex: isHighlighted ? 50 : 10
+                  }}
+                >
+                  {isMultiple && (
+                    <span className="absolute inset-0 flex items-center justify-center text-[8px] text-white font-bold">
+                      {group.accounts.length}
+                    </span>
+                  )}
                 </div>
               </div>
-            </div>
-          )
-        })}
-      </div>
+            )
+          })}
+        </div>
       </>
     )
   }
@@ -914,6 +961,16 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
           visibleStages={visibleStages}
         />
       )}
+      
+      <AccountUpdateTooltip
+        visible={accountTooltip.visible}
+        x={accountTooltip.x}
+        y={accountTooltip.y}
+        accounts={accountTooltip.accounts}
+        baseTime={accountTooltip.baseTime}
+        onMouseEnter={handleAccountTooltipMouseEnter}
+        onMouseLeave={handleAccountTooltipMouseLeave}
+      />
     </div>
   )
 }

@@ -50,6 +50,7 @@ export interface EndpointSummary {
   replay_time: Percentiles;
   confirmation_time: Percentiles;
   finalization_time: Percentiles;
+  account_delay?: Percentiles | null;
 }
 
 export interface Percentiles {

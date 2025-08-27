@@ -74,12 +74,12 @@ export function BenchmarkHeader({
             <h1 className="text-base sm:text-xl md:text-2xl lg:text-3xl font-bold bg-gradient-to-r from-[#DA05E2] to-[#2C0FDF] bg-clip-text text-transparent">
               Yellowstone Thorofare
             </h1>
-            <p className="text-xs sm:text-sm text-muted-foreground">gRPC Endpoint Benchmark Visualizer</p>
+            <p className="text-sm sm:text-sm text-muted-foreground">gRPC Endpoint Benchmark Visualizer</p>
             <a 
               href="https://github.com/rpcpool/yellowstone-thorofare" 
               target="_blank" 
               rel="noopener noreferrer"
-              className="text-xs text-primary hover:underline inline-flex items-center gap-1 mt-1"
+              className="text-sm text-primary hover:underline inline-flex items-center gap-1 mt-1"
             >
               <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
@@ -89,13 +89,13 @@ export function BenchmarkHeader({
           </div>
         </div>
         <div className="text-right space-y-1">
-          <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground justify-end">
+          <div className="flex items-center gap-2 text-sm sm:text-base text-muted-foreground justify-end">
             <Cpu className="h-3 w-3 sm:h-4 sm:w-4" />
             <span className="hidden sm:inline">Thorofare CLI Version: v{version}</span>
             <span className="sm:hidden">v{version}</span>
           </div>
           {with_load && (
-            <Badge variant="secondary" className="text-xs">
+            <Badge variant="secondary" className="text-sm">
               <Activity className="h-3 w-3 mr-1" />
               Load Testing Mode
             </Badge>
@@ -111,8 +111,8 @@ export function BenchmarkHeader({
                 <FileJson className="h-5 w-5 text-[#8424D1]" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Current Benchmark</p>
-                <p className="font-semibold">{currentBenchmarkName}</p>
+                <p className="text-sm text-muted-foreground">Current Benchmark</p>
+                <p className="font-semibold text-lg">{currentBenchmarkName}</p>
               </div>
               
               {/* Obvious button to switch benchmarks */}
@@ -126,7 +126,7 @@ export function BenchmarkHeader({
                 <span className="hidden sm:inline">View All</span>
                 <span className="sm:hidden">Change</span>
                 {benchmarksCount > 1 && (
-                  <span className="text-xs bg-muted px-1.5 py-0.5 rounded-full">
+                  <span className="text-sm bg-muted px-1.5 py-0.5 rounded-full">
                     {benchmarksCount}
                   </span>
                 )}
@@ -143,7 +143,7 @@ export function BenchmarkHeader({
                 <Clock className="h-4 w-4" />
                 <span>{formatDuration(metadata.duration_ms)}</span>
               </div>
-              <Badge variant="secondary" className="text-xs">
+              <Badge variant="secondary" className="text-sm">
                 {metadata.compared_slots} slots
               </Badge>
             </div>
@@ -174,27 +174,27 @@ export function BenchmarkHeader({
       
       {/* Metadata Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="p-4 border-border/50 hover:border-[#8424D1]/50 transition-colors">
-          <p className="text-sm text-muted-foreground">Duration</p>
-          <p className="text-2xl font-bold">{formatDuration(metadata.duration_ms)}</p>
+        <Card className="p-6 border-border/50 hover:border-[#8424D1]/50 transition-colors">
+          <p className="text-base text-muted-foreground">Duration</p>
+          <p className="text-3xl font-bold">{formatDuration(metadata.duration_ms)}</p>
         </Card>
         
-        <Card className="p-4 border-border/50 hover:border-[#8424D1]/50 transition-colors">
-          <p className="text-sm text-muted-foreground">Common Slots</p>
-          <p className="text-2xl font-bold">{metadata.common_slots}</p>
-          <p className="text-xs text-muted-foreground">
+        <Card className="p-6 border-border/50 hover:border-[#8424D1]/50 transition-colors">
+          <p className="text-base text-muted-foreground">Common Slots</p>
+          <p className="text-3xl font-bold">{metadata.common_slots}</p>
+          <p className="text-sm text-muted-foreground">
             of {metadata.total_slots_collected} total
           </p>
         </Card>
         
-        <Card className="p-4 border-border/50 hover:border-[#8424D1]/50 transition-colors">
-          <p className="text-sm text-muted-foreground">Compared</p>
-          <p className="text-2xl font-bold">{metadata.compared_slots}</p>
+        <Card className="p-6 border-border/50 hover:border-[#8424D1]/50 transition-colors">
+          <p className="text-base text-muted-foreground">Compared</p>
+          <p className="text-3xl font-bold">{metadata.compared_slots}</p>
         </Card>
         
-        <Card className="p-4 border-border/50 hover:border-[#8424D1]/50 transition-colors">
-          <p className="text-sm text-muted-foreground">Dropped</p>
-          <p className="text-2xl font-bold">{metadata.dropped_slots}</p>
+        <Card className="p-6 border-border/50 hover:border-[#8424D1]/50 transition-colors">
+          <p className="text-base text-muted-foreground">Dropped</p>
+          <p className="text-3xl font-bold">{metadata.dropped_slots}</p>
         </Card>
       </div>
       
@@ -218,10 +218,10 @@ export function BenchmarkHeader({
                   </h3>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="text-xs">
+                  <Badge variant="outline" className="text-sm">
                     {endpoint.plugin_type}
                   </Badge>
-                  <Badge variant="secondary" className="text-xs">
+                  <Badge variant="secondary" className="text-sm">
                     {formatVersionDisplay(endpoint.plugin_version)}
                   </Badge>
                 </div>
@@ -270,7 +270,7 @@ export function BenchmarkHeader({
                     <div className="flex-1">
                       <p className="text-sm font-medium">{displayName}</p>
                       {customName && (
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-sm text-muted-foreground">
                           Original: {parseEndpointName(endpoint.endpoint)}
                         </p>
                       )}
@@ -291,28 +291,28 @@ export function BenchmarkHeader({
                 )}
               </div>
               
-              <p className="text-xs text-muted-foreground break-all font-mono mb-1">
+              <p className="text-sm text-muted-foreground break-all font-mono mb-2">
                 {endpoint.endpoint}
               </p>
               
               {versionInfo.hostname && (
-                <p className="text-xs text-muted-foreground mb-2">
+                <p className="text-sm text-muted-foreground mb-2">
                   Host: {versionInfo.hostname}
                 </p>
               )}
               
               <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <p className="text-xs text-muted-foreground">Avg Ping</p>
-                  <p className="font-semibold">{endpoint.avg_ping_ms.toFixed(1)}ms</p>
+                  <p className="text-sm text-muted-foreground">Avg Ping</p>
+                  <p className="font-semibold text-lg">{endpoint.avg_ping_ms.toFixed(1)}ms</p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">Updates</p>
-                  <p className="font-semibold">{endpoint.total_updates.toLocaleString()}</p>
+                  <p className="text-sm text-muted-foreground">Updates</p>
+                  <p className="font-semibold text-lg">{endpoint.total_updates.toLocaleString()}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">Unique Slots</p>
-                  <p className="font-semibold">{endpoint.unique_slots}</p>
+                  <p className="text-sm text-muted-foreground">Unique Slots</p>
+                  <p className="font-semibold text-lg">{endpoint.unique_slots}</p>
                 </div>
               </div>
             </Card>
@@ -329,32 +329,32 @@ export function BenchmarkHeader({
         </CollapsibleTrigger>
         <CollapsibleContent>
           <Card className="mt-2 p-4 bg-muted/50">
-            <h4 className="font-semibold text-sm mb-3">gRPC Settings</h4>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+            <h4 className="font-semibold text-base mb-4">gRPC Settings</h4>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-base">
               <div>
-                <p className="text-xs text-muted-foreground">Connect Timeout</p>
-                <p className="font-mono">{grpc_config.connect_timeout_ms}ms</p>
+                <p className="text-sm text-muted-foreground">Connect Timeout</p>
+                <p className="font-mono text-lg">{grpc_config.connect_timeout_ms}ms</p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Request Timeout</p>
-                <p className="font-mono">{grpc_config.request_timeout_ms}ms</p>
+                <p className="text-sm text-muted-foreground">Request Timeout</p>
+                <p className="font-mono text-lg">{grpc_config.request_timeout_ms}ms</p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Max Message Size</p>
-                <p className="font-mono">{(grpc_config.max_message_size / 1024 / 1024).toFixed(1)}MB</p>
+                <p className="text-sm text-muted-foreground">Max Message Size</p>
+                <p className="font-mono text-lg">{(grpc_config.max_message_size / 1024 / 1024).toFixed(1)}MB</p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">TLS</p>
-                <p className="font-mono">{grpc_config.use_tls ? 'Enabled' : 'Disabled'}</p>
+                <p className="text-sm text-muted-foreground">TLS</p>
+                <p className="font-mono text-lg">{grpc_config.use_tls ? 'Enabled' : 'Disabled'}</p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">HTTP2 Adaptive Window</p>
-                <p className="font-mono">{grpc_config.http2_adaptive_window ? 'Enabled' : 'Disabled'}</p>
+                <p className="text-sm text-muted-foreground">HTTP2 Adaptive Window</p>
+                <p className="font-mono text-lg">{grpc_config.http2_adaptive_window ? 'Enabled' : 'Disabled'}</p>
               </div>
               {grpc_config.initial_connection_window_size && (
                 <div>
-                  <p className="text-xs text-muted-foreground">Connection Window</p>
-                  <p className="font-mono">{(grpc_config.initial_connection_window_size / 1024).toFixed(0)}KB</p>
+                  <p className="text-sm text-muted-foreground">Connection Window</p>
+                  <p className="font-mono text-lg">{(grpc_config.initial_connection_window_size / 1024).toFixed(0)}KB</p>
                 </div>
               )}
             </div>
