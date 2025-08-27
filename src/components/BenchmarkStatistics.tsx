@@ -88,6 +88,20 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
           description: "Time difference between when we receive 'Processed' notifications from each endpoint",
           ep1Data: data.endpoint1_summary.processing_delay,
           ep2Data: data.endpoint2_summary.processing_delay,
+        },
+        {
+          key: "confirmation_delay",
+          name: "Confirmation Delay",
+          description: "Time difference between when we receive 'Confirmed' updates from each endpoint",
+          ep1Data: data.endpoint1_summary.confirmation_delay,
+          ep2Data: data.endpoint2_summary.confirmation_delay,
+        },
+        {
+          key: "finalization_delay",
+          name: "Finalization Delay",
+          description: "Time difference between when we receive 'Finalized' updates from each endpoint",
+          ep1Data: data.endpoint1_summary.finalization_delay,
+          ep2Data: data.endpoint2_summary.finalization_delay,
         }
       ]
     },
@@ -125,11 +139,11 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
           ep2Data: data.endpoint2_summary.confirmation_time,
         },
         {
-          key: "confirmation_delay",
-          name: "Confirmation Delay",
-          description: "Time difference between when we receive 'Confirmed' updates from each endpoint",
-          ep1Data: data.endpoint1_summary.confirmation_delay,
-          ep2Data: data.endpoint2_summary.confirmation_delay,
+          key: "finalization_time",
+          name: "Finalization Time",
+          description: "Time between receiving 'Confirmed' and 'Finalized' updates from each endpoint",
+          ep1Data: data.endpoint1_summary.finalization_time,
+          ep2Data: data.endpoint2_summary.finalization_time,
         }
       ]
     }
@@ -146,32 +160,7 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
     })
   }
 
-  // Calculate overall performance analysis
-  const calculateOverallPerformance = () => {
-    let ep1Wins = 0
-    let ep2Wins = 0
-    let ties = 0
 
-    categories.forEach(category => {
-      category.metrics.forEach(metric => {
-        const p90Delta = calculateDelta(metric.ep1Data.p90, metric.ep2Data.p90)
-        if (p90Delta.faster === 'ep1') ep1Wins++
-        else if (p90Delta.faster === 'ep2') ep2Wins++
-        else ties++
-      })
-    })
-
-    const total = ep1Wins + ep2Wins + ties
-    return {
-      ep1Wins,
-      ep2Wins,
-      ties,
-      ep1Percentage: (ep1Wins / total) * 100,
-      ep2Percentage: (ep2Wins / total) * 100
-    }
-  }
-
-  const overallPerf = calculateOverallPerformance()
 
   return (
     <TooltipProvider>
@@ -200,48 +189,6 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
           </div>
         </Card>
 
-        {/* Overall Performance Summary */}
-        <Card className="p-6 bg-gradient-to-r from-violet-500/10 to-purple-500/10 border-violet-500/20">
-          <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
-            <TrendingUp className="h-6 w-6" />
-            Overall Performance Summary
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="text-center">
-              <div className="text-3xl font-bold mb-2" style={{ color: EP1_COLOR }}>
-                {overallPerf.ep1Percentage.toFixed(0)}%
-              </div>
-              <div className="text-base font-medium" style={{ color: EP1_COLOR }}>
-                {getEndpointShortName(0)} Faster
-              </div>
-              <div className="text-sm text-muted-foreground">
-                {overallPerf.ep1Wins} metrics
-              </div>
-            </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold mb-2" style={{ color: EP2_COLOR }}>
-                {overallPerf.ep2Percentage.toFixed(0)}%
-              </div>
-              <div className="text-base font-medium" style={{ color: EP2_COLOR }}>
-                {getEndpointShortName(1)} Faster
-              </div>
-              <div className="text-sm text-muted-foreground">
-                {overallPerf.ep2Wins} metrics
-              </div>
-            </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold mb-2 text-muted-foreground">
-                {((overallPerf.ties / (overallPerf.ep1Wins + overallPerf.ep2Wins + overallPerf.ties)) * 100).toFixed(0)}%
-              </div>
-              <div className="text-base font-medium text-muted-foreground">
-                Tied Metrics
-              </div>
-              <div className="text-sm text-muted-foreground">
-                {overallPerf.ties} metrics
-              </div>
-            </div>
-          </div>
-        </Card>
 
         {/* Performance Categories */}
         {categories.map((category, categoryIdx) => {
@@ -280,7 +227,7 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
                         </div>
                       </TableHead>
                       <TableHead className="text-center min-w-[120px]">
-                        <span className="text-base font-semibold">Winner</span>
+                        <span className="text-base font-semibold">Faster</span>
                       </TableHead>
                     </TableRow>
                   </TableHeader>
@@ -330,14 +277,6 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
                                   {formatDuration(p90Delta.diff)}
                                 </span>
                               </div>
-                              <div className="text-xs text-muted-foreground">
-                                {p90Delta.faster === 'ep1' 
-                                  ? `${getEndpointShortName(0)} faster`
-                                  : p90Delta.faster === 'ep2'
-                                  ? `${getEndpointShortName(1)} faster`
-                                  : 'Similar'
-                                }
-                              </div>
                             </div>
                           </TableCell>
                           <TableCell className="text-center">
@@ -348,7 +287,6 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
                                   <div className="text-xs font-semibold" style={{ color: EP1_COLOR }}>
                                     {getEndpointShortName(0)}
                                   </div>
-                                  <div className="text-xs text-muted-foreground">Faster</div>
                                 </div>
                               )}
                               {p90Delta.faster === 'ep2' && (
@@ -357,7 +295,6 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
                                   <div className="text-xs font-semibold" style={{ color: EP2_COLOR }}>
                                     {getEndpointShortName(1)}
                                   </div>
-                                  <div className="text-xs text-muted-foreground">Faster</div>
                                 </div>
                               )}
                               {p90Delta.faster === 'tie' && (
@@ -390,7 +327,7 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
                 <ul className="space-y-1 text-base">
                   <li>• <span className="font-semibold">P50/P90/P99</span> = 50th/90th/99th percentile performance</li>
                   <li>• <span className="font-semibold">Difference</span> = P90 performance gap between endpoints (90th percentile comparison)</li>
-                  <li>• <span className="font-semibold">Winner</span> = Which endpoint performs better for this metric (P90 comparison)</li>
+                  <li>• <span className="font-semibold">Faster</span> = Which endpoint performs better for this metric (P90 comparison)</li>
                 </ul>
               </div>
               
