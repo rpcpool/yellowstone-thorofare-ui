@@ -209,7 +209,6 @@ function App() {
               onZoomIn={handleZoomIn}
               onZoomOut={handleZoomOut}
               onReset={handleReset}
-              onFitAll={() => {}}
               onZoomChange={setZoom}
               visibleStages={visibleStages}
               onVisibleStagesChange={setVisibleStages}

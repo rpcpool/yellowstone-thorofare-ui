@@ -1,9 +1,10 @@
 import { useRef, useEffect, useState, useCallback } from "react"
-import type { BenchmarkResult, SlotDetail, SlotComparison } from "@/lib/types"
+import type { BenchmarkResult, SlotDetail, SlotComparison, AccountUpdateDetail } from "@/lib/types"
 import { STAGE_COLORS, STAGE_LABELS, ENDPOINT_COLORS, PIXELS_PER_MS, STAGE_HEIGHT, STAGE_SPACING } from "@/lib/constants"
 import { parseEndpointName } from "@/lib/endpoint-utils"
 import { cn } from "@/lib/utils"
 import { SlotTooltip } from "./SlotTooltip"
+import { AccountUpdateTooltip } from "./AccountUpdateTooltip"
 import type { StageVisibility } from "./TimelineControls"
 
 interface TimelineProps {
@@ -24,6 +25,14 @@ interface TooltipState {
   endpointName: string
 }
 
+interface AccountUpdateTooltipState {
+  visible: boolean
+  x: number
+  y: number
+  accounts: AccountUpdateDetail[]
+  baseTime: number
+}
+
 interface ProcessedStage {
   type: 'first_shred_delay' | 'confirmation_delay' | 'download' | 'replay' | 'confirmation'
   startTime: number
@@ -41,11 +50,11 @@ interface SlotWithLane {
   endTime: number
 }
 
-const SLOT_HEIGHT = 80 
+const SLOT_HEIGHT = 120
 const TIMELINE_PADDING = 40
 const HEADER_HEIGHT = 40
 const SLOT_LABEL_HEIGHT = 20
-const LANE_SPACING = 10
+const LANE_SPACING = 30
 
 interface TimeAxisProps {
   duration: number
@@ -60,10 +69,6 @@ const TimeAxis: React.FC<TimeAxisProps> = ({
   viewportOffset = 0,
   windowWidth
 }) => {
-  const pixelsPerMs = PIXELS_PER_MS * zoom
-  const tickInterval = getTickInterval(duration / zoom)
-  const ticks = []
-  
   const getContainerPercentage = () => {
     if (windowWidth < 640) return 0.95
     if (windowWidth < 1024) return 0.90
@@ -72,6 +77,10 @@ const TimeAxis: React.FC<TimeAxisProps> = ({
   }
   
   const containerWidth = windowWidth * getContainerPercentage() - 32
+  const pixelsPerMs = PIXELS_PER_MS * zoom
+  const visibleDuration = containerWidth / pixelsPerMs
+  const tickInterval = getTickInterval(visibleDuration)
+  const ticks = []
   
   for (let time = 0; time <= duration; time += tickInterval) {
     const x = time * pixelsPerMs - viewportOffset
@@ -105,14 +114,23 @@ function getTickInterval(visibleDuration: number): number {
   if (visibleDuration > 500) return 100
   if (visibleDuration > 200) return 50
   if (visibleDuration > 100) return 20
-  return 10
+  if (visibleDuration > 50) return 10
+  if (visibleDuration > 20) return 5
+  if (visibleDuration > 10) return 2
+  return 1
 }
 
 function formatTime(ms: number): string {
   if (ms >= 1000) {
     return `${(ms / 1000).toFixed(1)}s`
   }
-  return `${ms}ms`
+  if (ms >= 100) {
+    return `${Math.round(ms)}ms`
+  }
+  if (ms >= 10) {
+    return `${ms.toFixed(1)}ms`
+  }
+  return `${ms.toFixed(2)}ms`
 }
 
 export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, visibleStages, endpointNames }: TimelineProps) {
@@ -122,6 +140,7 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
   const [windowWidth, setWindowWidth] = useState(window.innerWidth)
   const [hoveredStage, setHoveredStage] = useState<string | null>(null)
   const tooltipTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const accountTooltipTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const [tooltip, setTooltip] = useState<TooltipState>({
     visible: false,
     x: 0,
@@ -130,6 +149,14 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
     endpoint: null,
     endpointName: ''
   })
+  const [accountTooltip, setAccountTooltip] = useState<AccountUpdateTooltipState>({
+    visible: false,
+    x: 0,
+    y: 0,
+    accounts: [],
+    baseTime: 0
+  })
+  const [hoveredAccountSignature, setHoveredAccountSignature] = useState<string | null>(null)
 
   useEffect(() => {
     const handleResize = () => {
@@ -464,6 +491,166 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
     }, 100)
   }
 
+  const handleAccountMouseEnter = (e: React.MouseEvent, accounts: AccountUpdateDetail[], baseTime: number) => {
+    if (accountTooltipTimeoutRef.current) {
+      clearTimeout(accountTooltipTimeoutRef.current)
+    }
+    
+    accountTooltipTimeoutRef.current = setTimeout(() => {
+      setAccountTooltip({
+        visible: true,
+        x: e.clientX,
+        y: e.clientY,
+        accounts,
+        baseTime
+      })
+    }, 200)
+  }
+
+  const handleAccountMouseLeave = () => {
+    if (accountTooltipTimeoutRef.current) {
+      clearTimeout(accountTooltipTimeoutRef.current)
+    }
+    
+    accountTooltipTimeoutRef.current = setTimeout(() => {
+      setAccountTooltip(prev => ({
+        ...prev,
+        visible: false
+      }))
+    }, 100)
+  }
+
+  const handleAccountTooltipMouseEnter = () => {
+    if (accountTooltipTimeoutRef.current) {
+      clearTimeout(accountTooltipTimeoutRef.current)
+    }
+  }
+
+  const handleAccountTooltipMouseLeave = () => {
+    handleAccountMouseLeave()
+  }
+
+  const renderAccountUpdates = (
+    endpoint: SlotDetail,
+    baseTime: number,
+    scale: number,
+    yOffset: number,
+  ) => {
+    if (!endpoint.account_updates || endpoint.account_updates.length === 0) {
+      return null
+    }
+
+    const sortedAccounts = [...endpoint.account_updates]
+      .sort((a, b) => a.timestamp - b.timestamp)
+    
+    const GROUPING_THRESHOLD = 5
+    const groupedUpdates: { accounts: typeof sortedAccounts, x: number, hasDelays: boolean }[] = []
+    
+    sortedAccounts.forEach(account => {
+      const x = (account.timestamp - baseTime) * scale
+      
+      const existingGroup = groupedUpdates.find(group => 
+        Math.abs(group.x - x) < GROUPING_THRESHOLD * scale
+      )
+      
+      if (existingGroup) {
+        existingGroup.accounts.push(account)
+        if (account.delay_ms != null && Number(account.delay_ms) > 0) {
+          existingGroup.hasDelays = true
+        }
+      } else {
+        groupedUpdates.push({
+          accounts: [account],
+          x: x,
+          hasDelays: account.delay_ms != null && Number(account.delay_ms) > 0
+        })
+      }
+    })
+    
+    return (
+      <>
+        <div
+          className="absolute"
+          style={{
+            top: `${yOffset + 110}px`, 
+            height: '20px',
+            left: 0,
+            right: 0,
+            pointerEvents: 'none'
+          }}
+        >
+          {groupedUpdates.map((group, groupIdx) => {
+            const isMultiple = group.accounts.length > 1
+            const hasOnlyDelays = group.accounts.every(a => a.delay_ms != null && Number(a.delay_ms) > 0)
+            const hasOnlyOnTime = group.accounts.every(a => a.delay_ms == null || Number(a.delay_ms) === 0)
+            const hasMixed = !hasOnlyDelays && !hasOnlyOnTime
+            
+            const isHighlighted = group.accounts.some(account => 
+              hoveredAccountSignature && account.tx_signature === hoveredAccountSignature
+            )
+            
+            return (
+              <div
+                key={`account-group-${groupIdx}`}
+                className="absolute"
+                style={{
+                  left: `${group.x}px`,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  pointerEvents: 'auto',
+                  zIndex: hasOnlyDelays ? 22 : hasOnlyOnTime ? 20 : 21
+                }}
+                onMouseEnter={(e) => {
+                  e.stopPropagation()
+                  handleAccountMouseEnter(e, group.accounts, baseTime)
+                  // highlight corresponding accounts
+                  if (group.accounts.length > 0) {
+                    setHoveredAccountSignature(group.accounts[0].tx_signature)
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  e.stopPropagation()
+                  handleAccountMouseLeave()
+                  setHoveredAccountSignature(null)
+                }}
+              >
+                <div 
+                  className={cn(
+                    "rounded-full transition-all cursor-pointer hover:scale-125 relative",
+                    hasOnlyDelays ? "bg-red-500" : hasOnlyOnTime ? "bg-emerald-500" : "bg-orange-500",
+                    isMultiple && "ring-2",
+                    hasOnlyDelays && isMultiple && "ring-red-400",
+                    hasOnlyOnTime && isMultiple && "ring-emerald-400",
+                    hasMixed && isMultiple && "ring-orange-400",
+                    isHighlighted && "ring-4 ring-blue-400 scale-150"
+                  )}
+                  style={{
+                    width: isMultiple ? '12px' : '8px',
+                    height: isMultiple ? '12px' : '8px',
+                    opacity: hasOnlyOnTime ? 0.7 : 0.9,
+                    boxShadow: isHighlighted 
+                      ? '0 0 12px rgba(59, 130, 246, 0.8)' 
+                      : hasOnlyDelays ? '0 0 6px rgba(239, 68, 68, 0.4)' : 
+                        hasOnlyOnTime ? '0 0 4px rgba(16, 185, 129, 0.3)' : 
+                        '0 0 5px rgba(251, 146, 60, 0.4)',
+                    position: 'relative',
+                    zIndex: isHighlighted ? 50 : 10
+                  }}
+                >
+                  {isMultiple && (
+                    <span className="absolute inset-0 flex items-center justify-center text-[8px] text-white font-bold">
+                      {group.accounts.length}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </>
+    )
+  }
+
   const renderStages = (
     endpoint: SlotDetail,
     otherEndpoint: SlotDetail,
@@ -564,7 +751,7 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
           isDragging ? "cursor-grabbing" : "cursor-grab"
         )}
         style={{ 
-          height: '600px',
+          height: '715px',
           maxWidth: '100%',
           overflowX: 'auto'
         }}
@@ -604,11 +791,11 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
                 key={`ep1-lane-${laneIndex}`}
                 className={cn(
                   "absolute left-0 right-0",
-                  laneIndex % 2 === 0 ? "bg-muted/10" : "bg-muted/20"
+                  laneIndex % 2 === 0 ? "bg-muted/70" : "bg-muted/100"
                 )}
                 style={{
-                  top: `${TIMELINE_PADDING + SLOT_LABEL_HEIGHT + laneIndex * SLOT_HEIGHT}px`,
-                  height: SLOT_HEIGHT
+                  top: `${laneIndex === 0 ? TIMELINE_PADDING + SLOT_LABEL_HEIGHT + laneIndex * SLOT_HEIGHT - 5 : TIMELINE_PADDING + SLOT_LABEL_HEIGHT + laneIndex * SLOT_HEIGHT + 20}px`,
+                  height: SLOT_HEIGHT + 25
                 }}
               />
             ))}
@@ -653,6 +840,13 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
                       )}
                     </div>
                     
+                    {renderAccountUpdates(
+                      slot.endpoint1,
+                      firstTimestamp,
+                      pixelsPerMs,
+                      0,
+                    )}
+                    
                     {renderStages(
                       slot.endpoint1,
                       slot.endpoint2,
@@ -671,7 +865,7 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
           <div 
             className="absolute left-0 right-0 bg-gradient-to-r from-violet-900 via-border to-violet-500/50 border-t border-b border-border" 
             style={{ 
-              top: ep1Height + 40, 
+              top: ep1Height + 45, 
               height: '2px' 
             }} 
           />
@@ -684,11 +878,11 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
                 key={`ep2-lane-${laneIndex}`}
                 className={cn(
                   "absolute left-0 right-0",
-                  laneIndex % 2 === 0 ? "bg-muted/10" : "bg-muted/20"
+                  laneIndex % 2 === 0 ? "bg-muted/70" : "bg-muted/100"
                 )}
                 style={{
-                  top: `${TIMELINE_PADDING + SLOT_LABEL_HEIGHT + laneIndex * SLOT_HEIGHT}px`,
-                  height: SLOT_HEIGHT
+                  top: `${laneIndex === 0 ? TIMELINE_PADDING + SLOT_LABEL_HEIGHT + laneIndex * SLOT_HEIGHT - 5 : TIMELINE_PADDING + SLOT_LABEL_HEIGHT + laneIndex * SLOT_HEIGHT + 20}px`,
+                  height: SLOT_HEIGHT + 25
                 }}
               />
             ))}
@@ -733,6 +927,13 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
                       )}
                     </div>
                     
+                    {renderAccountUpdates(
+                      slot.endpoint2,
+                      firstTimestamp,
+                      pixelsPerMs,
+                      0,
+                    )}
+                    
                     {renderStages(
                       slot.endpoint2,
                       slot.endpoint1,
@@ -760,6 +961,16 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
           visibleStages={visibleStages}
         />
       )}
+      
+      <AccountUpdateTooltip
+        visible={accountTooltip.visible}
+        x={accountTooltip.x}
+        y={accountTooltip.y}
+        accounts={accountTooltip.accounts}
+        baseTime={accountTooltip.baseTime}
+        onMouseEnter={handleAccountTooltipMouseEnter}
+        onMouseLeave={handleAccountTooltipMouseLeave}
+      />
     </div>
   )
 }

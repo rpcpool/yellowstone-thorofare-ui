@@ -1,6 +1,8 @@
 export interface BenchmarkResult {
   version: string;
   with_load: boolean;
+  with_accounts: boolean;
+  account_owner?: string | null;
   grpc_config: GrpcConfigSummary;
   metadata: Metadata;
   endpoints: [EndpointInfo, EndpointInfo];
@@ -26,6 +28,7 @@ export interface Metadata {
   dropped_slots: number;
   duration_ms: number;
   benchmark_start_time: number;
+  total_account_updates?: [number, number] | null;
 }
 
 export interface EndpointInfo {
@@ -35,15 +38,19 @@ export interface EndpointInfo {
   avg_ping_ms: number;
   total_updates: number;
   unique_slots: number;
+  account_updates?: number | null;
 }
 
 export interface EndpointSummary {
   first_shred_delay: Percentiles;
   processing_delay: Percentiles;
+  confirmation_delay: Percentiles;
+  finalization_delay: Percentiles;
   download_time: Percentiles;
   replay_time: Percentiles;
   confirmation_time: Percentiles;
   finalization_time: Percentiles;
+  account_delay?: Percentiles | null;
 }
 
 export interface Percentiles {
@@ -65,6 +72,15 @@ export interface SlotDetail {
   finalization_delay_ms: number | null;
   transitions: Transition[];
   durations: StageDurations;
+  account_updates: AccountUpdateDetail[];
+}
+
+export interface AccountUpdateDetail {
+  pubkey: string;
+  write_version: number;
+  tx_signature: string;
+  delay_ms: number | null;
+  timestamp: number;
 }
 
 export interface Transition {

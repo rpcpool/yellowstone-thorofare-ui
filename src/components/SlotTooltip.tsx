@@ -153,6 +153,38 @@ export function SlotTooltip({
         </div>
       </div>
       
+      {endpoint.account_updates && endpoint.account_updates.length > 0 && (
+        <div className="space-y-1 border-t pt-2">
+          <p className="text-xs font-semibold text-muted-foreground">Account Updates:</p>
+          <div className="text-xs space-y-0.5">
+            <div className="flex justify-between gap-4">
+              <span className="text-muted-foreground">Total:</span>
+              <span className="text-foreground font-mono">{endpoint.account_updates.length}</span>
+            </div>
+            {(() => {
+              const delayedCount = endpoint.account_updates.filter(a => a.delay_ms != null && Number(a.delay_ms) > 0).length
+              const onTimeCount = endpoint.account_updates.length - delayedCount
+              return (
+                <>
+                  {onTimeCount > 0 && (
+                    <div className="flex justify-between gap-4">
+                      <span className="text-emerald-600 dark:text-emerald-400">On-time:</span>
+                      <span className="text-emerald-600 dark:text-emerald-400 font-mono">{onTimeCount}</span>
+                    </div>
+                  )}
+                  {delayedCount > 0 && (
+                    <div className="flex justify-between gap-4">
+                      <span className="text-red-600 dark:text-red-400">Delayed:</span>
+                      <span className="text-red-600 dark:text-red-400 font-mono">{delayedCount}</span>
+                    </div>
+                  )}
+                </>
+              )
+            })()}
+          </div>
+        </div>
+      )}
+      
       <div className="text-xs text-muted-foreground border-t pt-2">
         Total slot duration: {formatDuration(calculateTotalDuration())}
       </div>
