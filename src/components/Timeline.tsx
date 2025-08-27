@@ -41,11 +41,11 @@ interface SlotWithLane {
   endTime: number
 }
 
-const SLOT_HEIGHT = 80 
+const SLOT_HEIGHT = 120
 const TIMELINE_PADDING = 40
 const HEADER_HEIGHT = 40
 const SLOT_LABEL_HEIGHT = 20
-const LANE_SPACING = 10
+const LANE_SPACING = 30
 
 interface TimeAxisProps {
   duration: number
@@ -464,6 +464,146 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
     }, 100)
   }
 
+  const renderAccountUpdates = (
+    endpoint: SlotDetail,
+    baseTime: number,
+    scale: number,
+    yOffset: number,
+  ) => {
+    if (!endpoint.account_updates || endpoint.account_updates.length === 0) {
+      return null
+    }
+
+    // Sort account updates by timestamp for better visual consistency
+    const sortedAccounts = [...endpoint.account_updates].sort((a, b) => a.timestamp - b.timestamp)
+    const delayedCount = sortedAccounts.filter(a => a.delay_ms && a.delay_ms > 0).length
+    
+    return (
+      <>
+        {/* Account summary badge */}
+        {sortedAccounts.length > 0 && (
+          <div
+            className="absolute text-[10px] font-medium bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded-md border border-gray-300 dark:border-gray-600"
+            style={{
+              top: `${yOffset + 85}px`,
+              left: '5px',
+              zIndex: 5
+            }}
+          >
+            {sortedAccounts.length} acct{sortedAccounts.length !== 1 ? 's' : ''}
+            {delayedCount > 0 && (
+              <span className="text-red-500 ml-1">
+                ({delayedCount} delayed)
+              </span>
+            )}
+          </div>
+        )}
+        
+        <div
+          className="absolute"
+          style={{
+            top: `${yOffset + 105}px`, 
+            height: '20px',
+            left: 0,
+            right: 0,
+            pointerEvents: 'none'
+          }}
+        >
+          {sortedAccounts.map((account, idx) => {
+          const x = (account.timestamp - baseTime) * scale
+          const hasDelay = account.delay_ms && account.delay_ms > 0
+          
+          return (
+            <div
+              key={`account-${idx}-${account.pubkey}-${account.write_version}`}
+              className="absolute group hover:!z-[10000]"
+              style={{
+                left: `${x}px`,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                pointerEvents: 'auto'
+              }}
+            >
+              {/* Invisible hover area extension to keep card visible */}
+              <div 
+                className="absolute opacity-0 pointer-events-auto"
+                style={{
+                  top: '-40px',
+                  bottom: '-10px',
+                  left: '-10px',
+                  right: '-10px',
+                  zIndex: 9998
+                }}
+              />
+              
+              {/* Vertical connector line that appears on hover */}
+              <div 
+                className="absolute w-px bg-gray-400 opacity-0 group-hover:opacity-30 transition-opacity pointer-events-none"
+                style={{
+                  top: '-33px',
+                  bottom: '12px',
+                  left: '4px'
+                }}
+              />
+              
+              <div 
+                className={cn(
+                  "rounded-full transition-all cursor-pointer hover:scale-125 relative",
+                  hasDelay ? "bg-red-500 ring-1 ring-red-400/40" : "bg-emerald-500"
+                )}
+                style={{
+                  width: '8px',
+                  height: '8px',
+                  opacity: hasDelay ? 0.9 : 0.7,
+                  boxShadow: hasDelay ? '0 0 6px rgba(239, 68, 68, 0.4)' : '0 0 4px rgba(16, 185, 129, 0.3)',
+                  position: 'relative',
+                  zIndex: 10
+                }}
+              />
+              
+              {/* Hover card */}
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-auto" style={{ zIndex: 9999, marginBottom: '8px' }}>
+                <div className="bg-card/95 backdrop-blur-sm border rounded-lg shadow-lg p-2 min-w-[200px] text-xs relative">
+                  <div className="space-y-1">
+                    <div className="font-semibold text-foreground">Account Update</div>
+                    <div className="text-muted-foreground">
+                      <span className="font-mono">{account.pubkey.slice(0, 8)}...{account.pubkey.slice(-4)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Write Version:</span>
+                      <span className="font-mono">{account.write_version}</span>
+                    </div>
+                    {hasDelay && (
+                      <div className="flex justify-between text-red-500">
+                        <span>Delay:</span>
+                        <span className="font-semibold">{account.delay_ms?.toFixed(2)}ms</span>
+                      </div>
+                    )}
+                    <div className="pt-1 border-t">
+                      <a 
+                        href={`https://solscan.io/tx/${account.tx_signature}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-500 hover:text-blue-400 flex items-center gap-1 pointer-events-auto"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <span>View on Solscan</span>
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      </>
+    )
+  }
+
   const renderStages = (
     endpoint: SlotDetail,
     otherEndpoint: SlotDetail,
@@ -564,7 +704,7 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
           isDragging ? "cursor-grabbing" : "cursor-grab"
         )}
         style={{ 
-          height: '600px',
+          height: '715px',
           maxWidth: '100%',
           overflowX: 'auto'
         }}
@@ -604,11 +744,11 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
                 key={`ep1-lane-${laneIndex}`}
                 className={cn(
                   "absolute left-0 right-0",
-                  laneIndex % 2 === 0 ? "bg-muted/10" : "bg-muted/20"
+                  laneIndex % 2 === 0 ? "bg-muted/70" : "bg-muted/100"
                 )}
                 style={{
-                  top: `${TIMELINE_PADDING + SLOT_LABEL_HEIGHT + laneIndex * SLOT_HEIGHT}px`,
-                  height: SLOT_HEIGHT
+                  top: `${laneIndex === 0 ? TIMELINE_PADDING + SLOT_LABEL_HEIGHT + laneIndex * SLOT_HEIGHT - 5 : TIMELINE_PADDING + SLOT_LABEL_HEIGHT + laneIndex * SLOT_HEIGHT + 20}px`,
+                  height: SLOT_HEIGHT + 25
                 }}
               />
             ))}
@@ -653,6 +793,13 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
                       )}
                     </div>
                     
+                    {renderAccountUpdates(
+                      slot.endpoint1,
+                      firstTimestamp,
+                      pixelsPerMs,
+                      0,
+                    )}
+                    
                     {renderStages(
                       slot.endpoint1,
                       slot.endpoint2,
@@ -671,7 +818,7 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
           <div 
             className="absolute left-0 right-0 bg-gradient-to-r from-violet-900 via-border to-violet-500/50 border-t border-b border-border" 
             style={{ 
-              top: ep1Height + 40, 
+              top: ep1Height + 45, 
               height: '2px' 
             }} 
           />
@@ -684,11 +831,11 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
                 key={`ep2-lane-${laneIndex}`}
                 className={cn(
                   "absolute left-0 right-0",
-                  laneIndex % 2 === 0 ? "bg-muted/10" : "bg-muted/20"
+                  laneIndex % 2 === 0 ? "bg-muted/70" : "bg-muted/100"
                 )}
                 style={{
-                  top: `${TIMELINE_PADDING + SLOT_LABEL_HEIGHT + laneIndex * SLOT_HEIGHT}px`,
-                  height: SLOT_HEIGHT
+                  top: `${laneIndex === 0 ? TIMELINE_PADDING + SLOT_LABEL_HEIGHT + laneIndex * SLOT_HEIGHT - 5 : TIMELINE_PADDING + SLOT_LABEL_HEIGHT + laneIndex * SLOT_HEIGHT + 20}px`,
+                  height: SLOT_HEIGHT + 25
                 }}
               />
             ))}
@@ -732,6 +879,13 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
                         </span>
                       )}
                     </div>
+                    
+                    {renderAccountUpdates(
+                      slot.endpoint2,
+                      firstTimestamp,
+                      pixelsPerMs,
+                      0,
+                    )}
                     
                     {renderStages(
                       slot.endpoint2,
