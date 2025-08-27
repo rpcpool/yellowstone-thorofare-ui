@@ -65,10 +65,10 @@ export function SlotTooltip({
   }
 
   const formatDuration = (ms: number) => {
-    if (ms < 0.001) return `${(ms * 1000000).toFixed(0)}ns`
-    if (ms < 1) return `${(ms * 1000).toFixed(3)}μs`
-    if (ms < 1000) return `${ms.toFixed(3)}ms`
-    return `${(ms / 1000).toFixed(3)}s`
+    if (ms < 0.001) return `${ms * 1000000}ns`
+    if (ms < 1) return `${ms * 1000}μs`
+    if (ms < 1000) return `${ms}ms`
+    return `${ms / 1000}s`
   }
 
   if (!visible) return null

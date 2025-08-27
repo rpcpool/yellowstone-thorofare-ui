@@ -121,16 +121,42 @@ function getTickInterval(visibleDuration: number): number {
 }
 
 function formatTime(ms: number): string {
-  if (ms >= 1000) {
-    return `${(ms / 1000).toFixed(1)}s`
+  // Smart formatting based on time scale for better readability with microsecond support
+  const hasMicroseconds = ms % 1 !== 0
+  
+  if (ms < 1000) {
+    if (hasMicroseconds) {
+      const wholMs = Math.floor(ms)
+      const microseconds = Math.round((ms - wholMs) * 1000)
+      return wholMs > 0 ? `${wholMs}ms ${microseconds}μs` : `${microseconds}μs`
+    }
+    return `${ms}ms`
+  } else if (ms < 60000) {
+    const seconds = Math.floor(ms / 1000)
+    const remainingMs = ms % 1000
+    if (hasMicroseconds && remainingMs > 0) {
+      const wholMs = Math.floor(remainingMs)
+      const microseconds = Math.round((remainingMs - wholMs) * 1000)
+      return `${seconds}s ${wholMs}ms ${microseconds}μs`
+    }
+    return remainingMs > 0 ? `${seconds}s ${Math.floor(remainingMs)}ms` : `${seconds}s`
+  } else {
+    const minutes = Math.floor(ms / 60000)
+    const seconds = Math.floor((ms % 60000) / 1000)
+    const remainingMs = ms % 1000
+    let result = `${minutes}m`
+    if (seconds > 0) result += ` ${seconds}s`
+    if (remainingMs > 0) {
+      if (hasMicroseconds) {
+        const wholMs = Math.floor(remainingMs)
+        const microseconds = Math.round((remainingMs - wholMs) * 1000)
+        result += ` ${wholMs}ms ${microseconds}μs`
+      } else {
+        result += ` ${Math.floor(remainingMs)}ms`
+      }
+    }
+    return result
   }
-  if (ms >= 100) {
-    return `${Math.round(ms)}ms`
-  }
-  if (ms >= 10) {
-    return `${ms.toFixed(1)}ms`
-  }
-  return `${ms.toFixed(2)}ms`
 }
 
 export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, visibleStages, endpointNames }: TimelineProps) {
@@ -199,7 +225,7 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
         startTime: firstShred,
         endTime: completed,
         duration: endpoint.durations.download_ms,
-        label: `${STAGE_LABELS.download} ${Math.round(endpoint.durations.download_ms)}ms`,
+        label: `${STAGE_LABELS.download} ${endpoint.durations.download_ms.toFixed(1)}ms`,
         parallel: false,
         parallelIndex: 0
       })
@@ -212,7 +238,7 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
         startTime: createdBank,
         endTime: processed,
         duration: endpoint.durations.replay_ms,
-        label: `${STAGE_LABELS.replay} ${Math.round(endpoint.durations.replay_ms)}ms`,
+        label: `${STAGE_LABELS.replay} ${endpoint.durations.replay_ms.toFixed(1)}ms`,
         parallel: false,
         parallelIndex: 0
       })
@@ -239,7 +265,7 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
         startTime: processed,
         endTime: confirmed,
         duration: endpoint.durations.confirmation_ms,
-        label: `${STAGE_LABELS.confirmation} ${Math.round(endpoint.durations.confirmation_ms)}ms`,
+        label: `${STAGE_LABELS.confirmation} ${endpoint.durations.confirmation_ms.toFixed(1)}ms`,
         parallel: false,
         parallelIndex: 0
       })
@@ -706,7 +732,7 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
           )}
           {width > 30 && width <= 60 && (
             <span className="truncate px-1 text-[10px]">
-              {isDelay ? '⏱' : stage.type.substring(0, 1).toUpperCase()} {Math.round(stage.duration)}
+              {isDelay ? '⏱' : stage.type.substring(0, 1).toUpperCase()} {stage.duration.toFixed(1)}
             </span>
           )}
           {width <= 30 && isDelay && (

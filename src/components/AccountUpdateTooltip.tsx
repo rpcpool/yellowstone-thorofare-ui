@@ -3,6 +3,46 @@ import { createPortal } from "react-dom"
 import type { AccountUpdateDetail } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
+function formatSmartTime(ms: number): string {
+  // Check if we have microsecond precision (decimal places)
+  const hasMicroseconds = ms % 1 !== 0
+  
+  if (ms < 1000) {
+    if (hasMicroseconds) {
+      // Show microseconds for sub-millisecond precision
+      const wholMs = Math.floor(ms)
+      const microseconds = Math.round((ms - wholMs) * 1000)
+      return wholMs > 0 ? `${wholMs}ms ${microseconds}μs` : `${microseconds}μs`
+    }
+    return `${ms}ms`
+  } else if (ms < 60000) {
+    const seconds = Math.floor(ms / 1000)
+    const remainingMs = ms % 1000
+    if (hasMicroseconds && remainingMs > 0) {
+      const wholMs = Math.floor(remainingMs)
+      const microseconds = Math.round((remainingMs - wholMs) * 1000)
+      return `${seconds}s ${wholMs}ms ${microseconds}μs`
+    }
+    return remainingMs > 0 ? `${seconds}s ${Math.floor(remainingMs)}ms` : `${seconds}s`
+  } else {
+    const minutes = Math.floor(ms / 60000)
+    const seconds = Math.floor((ms % 60000) / 1000)
+    const remainingMs = ms % 1000
+    let result = `${minutes}m`
+    if (seconds > 0) result += ` ${seconds}s`
+    if (remainingMs > 0) {
+      if (hasMicroseconds) {
+        const wholMs = Math.floor(remainingMs)
+        const microseconds = Math.round((remainingMs - wholMs) * 1000)
+        result += ` ${wholMs}ms ${microseconds}μs`
+      } else {
+        result += ` ${Math.floor(remainingMs)}ms`
+      }
+    }
+    return result
+  }
+}
+
 interface AccountUpdateTooltipProps {
   visible: boolean
   x: number
@@ -112,8 +152,8 @@ export function AccountUpdateTooltip({
                 </div>
                 
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                  <div className="text-muted-foreground">Timestamp:</div>
-                  <div className="font-mono text-[11px]">+{((account.timestamp - baseTime)).toFixed(2)}ms</div>
+                  <div className="text-muted-foreground">Time from Start:</div>
+                  <div className="font-mono text-[11px]">+{formatSmartTime(account.timestamp - baseTime)}</div>
                   
                   <div className="text-muted-foreground">Write Version:</div>
                   <div className="font-mono">{account.write_version}</div>
@@ -121,7 +161,7 @@ export function AccountUpdateTooltip({
                   {hasDelay && (
                     <>
                       <div className="text-red-500">Delay:</div>
-                      <div className="font-semibold text-red-500">{Number(account.delay_ms).toFixed(2)}ms</div>
+                      <div className="font-semibold text-red-500">{account.delay_ms}ms</div>
                     </>
                   )}
                 </div>
