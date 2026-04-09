@@ -4,6 +4,7 @@ import { TimelineControls, type StageVisibility } from "@/components/TimelineCon
 import { Timeline } from "@/components/Timeline"
 import { BenchmarkStatistics } from "@/components/BenchmarkStatistics"
 import { AccountUpdateChart } from "@/components/AccountUpdateChart"
+import { TransactionUpdateChart } from "@/components/TransactionUpdateChart"
 import { BenchmarkDataManager } from "@/components/BenchmarkDataManager"
 import type { BenchmarkResult } from "./lib/types"
 
@@ -225,6 +226,11 @@ function App() {
             />
             
             <AccountUpdateChart
+              data={benchmarkData}
+              endpointNames={currentEndpointNames}
+            />
+
+            <TransactionUpdateChart
               data={benchmarkData}
               endpointNames={currentEndpointNames}
             />

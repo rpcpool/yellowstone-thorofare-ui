@@ -3,6 +3,7 @@ export interface BenchmarkResult {
   with_load: boolean;
   with_accounts: boolean;
   account_owner?: string | null;
+  with_transactions: boolean;
   grpc_config: GrpcConfigSummary;
   metadata: Metadata;
   endpoints: [EndpointInfo, EndpointInfo];
@@ -29,6 +30,7 @@ export interface Metadata {
   duration_ms: number;
   benchmark_start_time: number;
   total_account_updates?: [number, number] | null;
+  total_transaction_updates?: [number, number] | null;
 }
 
 export interface EndpointInfo {
@@ -39,6 +41,7 @@ export interface EndpointInfo {
   total_updates: number;
   unique_slots: number;
   account_updates?: number | null;
+  transaction_updates?: number | null;
 }
 
 export interface EndpointSummary {
@@ -51,6 +54,13 @@ export interface EndpointSummary {
   confirmation_time: Percentiles;
   finalization_time: Percentiles;
   account_delay?: Percentiles | null;
+  account_matched: number;
+  account_faster: number;
+  account_slower: number;
+  transaction_delay?: Percentiles | null;
+  transaction_matched: number;
+  transaction_faster: number;
+  transaction_slower: number;
 }
 
 export interface Percentiles {
@@ -73,12 +83,20 @@ export interface SlotDetail {
   transitions: Transition[];
   durations: StageDurations;
   account_updates: AccountUpdateDetail[];
+  transaction_updates: TransactionUpdateDetail[];
 }
 
 export interface AccountUpdateDetail {
   pubkey: string;
   write_version: number;
   tx_signature: string;
+  delay_ms: number | null;
+  timestamp: number;
+}
+
+export interface TransactionUpdateDetail {
+  signature: string;
+  slot: number;
   delay_ms: number | null;
   timestamp: number;
 }

@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback } from "react"
+import { useRef, useEffect, useState, useCallback, useMemo } from "react"
 import type { BenchmarkResult, SlotDetail, SlotComparison, AccountUpdateDetail } from "@/lib/types"
 import { STAGE_COLORS, STAGE_LABELS, ENDPOINT_COLORS, PIXELS_PER_MS, STAGE_HEIGHT, STAGE_SPACING } from "@/lib/constants"
 import { parseEndpointName } from "@/lib/endpoint-utils"
@@ -159,10 +159,10 @@ function formatTime(ms: number): string {
   }
 }
 
-export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, visibleStages, endpointNames }: TimelineProps) {
+export function Timeline({ data, zoom, viewportOffset = 0, visibleStages, endpointNames }: TimelineProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
-  const [isDragging, setIsDragging] = useState(false)
-  const [dragStart, setDragStart] = useState({ x: 0, scrollLeft: 0 })
+  const isDraggingRef = useRef(false)
+  const dragStartRef = useRef({ x: 0, scrollLeft: 0 })
   const [windowWidth, setWindowWidth] = useState(window.innerWidth)
   const [hoveredStage, setHoveredStage] = useState<string | null>(null)
   const tooltipTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -182,7 +182,9 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
     accounts: [],
     baseTime: 0
   })
-  const [hoveredAccountSignature, setHoveredAccountSignature] = useState<string | null>(null)
+  const hoveredAccountSignatureRef = useRef<string | null>(null)
+  const dotElementsRef = useRef<Map<string, HTMLDivElement>>(new Map())
+  const hoveredDotIdxRef = useRef<number | null>(null)
 
   useEffect(() => {
     const handleResize = () => {
@@ -416,60 +418,67 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
   const calculatedWidth = totalDuration * pixelsPerMs + 200
   const timelineWidth = Math.max(minWidth, calculatedWidth)
 
-  const ep1Slots = assignSlotLanes(data.slots, 'endpoint1')
-  const ep2Slots = assignSlotLanes(data.slots, 'endpoint2')
-  
-  const maxEp1Lanes = Math.max(...ep1Slots.map(s => s.lane)) + 1
-  const maxEp2Lanes = Math.max(...ep2Slots.map(s => s.lane)) + 1
-  
+  const ep1Slots = useMemo(() => assignSlotLanes(data.slots, 'endpoint1'), [data.slots, visibleStages])
+  const ep2Slots = useMemo(() => assignSlotLanes(data.slots, 'endpoint2'), [data.slots, visibleStages])
+
+  const maxEp1Lanes = useMemo(() => Math.max(...ep1Slots.map(s => s.lane)) + 1, [ep1Slots])
+  const maxEp2Lanes = useMemo(() => Math.max(...ep2Slots.map(s => s.lane)) + 1, [ep2Slots])
+
   const ep1Height = maxEp1Lanes * SLOT_HEIGHT + TIMELINE_PADDING + SLOT_LABEL_HEIGHT
   const ep2Height = maxEp2Lanes * SLOT_HEIGHT + TIMELINE_PADDING + SLOT_LABEL_HEIGHT
   const totalHeight = ep1Height + ep2Height + 80
 
-  const ep1LabelPositions = calculateSlotLabelPositions(ep1Slots, pixelsPerMs, firstTimestamp)
-  const ep2LabelPositions = calculateSlotLabelPositions(ep2Slots, pixelsPerMs, firstTimestamp)
+  const ep1LabelPositions = useMemo(() => calculateSlotLabelPositions(ep1Slots, pixelsPerMs, firstTimestamp), [ep1Slots, pixelsPerMs, firstTimestamp])
+  const ep2LabelPositions = useMemo(() => calculateSlotLabelPositions(ep2Slots, pixelsPerMs, firstTimestamp), [ep2Slots, pixelsPerMs, firstTimestamp])
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    setIsDragging(true)
-    setDragStart({
+    isDraggingRef.current = true
+    dragStartRef.current = {
       x: e.clientX,
       scrollLeft: scrollRef.current?.scrollLeft || 0
-    })
+    }
+    if (scrollRef.current) {
+      scrollRef.current.style.cursor = 'grabbing'
+    }
     e.preventDefault()
   }, [])
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!isDragging || !scrollRef.current) return
-    
-    const dx = e.clientX - dragStart.x
-    scrollRef.current.scrollLeft = dragStart.scrollLeft - dx
-  }, [isDragging, dragStart])
+    if (!isDraggingRef.current || !scrollRef.current) return
+
+    const dx = e.clientX - dragStartRef.current.x
+    scrollRef.current.scrollLeft = dragStartRef.current.scrollLeft - dx
+  }, [])
 
   const handleMouseUp = useCallback(() => {
-    setIsDragging(false)
+    isDraggingRef.current = false
+    if (scrollRef.current) {
+      scrollRef.current.style.cursor = 'grab'
+    }
   }, [])
 
   useEffect(() => {
-    if (isDragging) {
-      const handleGlobalMouseMove = (e: MouseEvent) => {
-        if (!scrollRef.current) return
-        const dx = e.clientX - dragStart.x
-        scrollRef.current.scrollLeft = dragStart.scrollLeft - dx
-      }
-      
-      const handleGlobalMouseUp = () => {
-        setIsDragging(false)
-      }
-      
-      document.addEventListener('mousemove', handleGlobalMouseMove)
-      document.addEventListener('mouseup', handleGlobalMouseUp)
-      
-      return () => {
-        document.removeEventListener('mousemove', handleGlobalMouseMove)
-        document.removeEventListener('mouseup', handleGlobalMouseUp)
+    const handleGlobalMouseMove = (e: MouseEvent) => {
+      if (!isDraggingRef.current || !scrollRef.current) return
+      const dx = e.clientX - dragStartRef.current.x
+      scrollRef.current.scrollLeft = dragStartRef.current.scrollLeft - dx
+    }
+
+    const handleGlobalMouseUp = () => {
+      isDraggingRef.current = false
+      if (scrollRef.current) {
+        scrollRef.current.style.cursor = 'grab'
       }
     }
-  }, [isDragging, dragStart])
+
+    document.addEventListener('mousemove', handleGlobalMouseMove)
+    document.addEventListener('mouseup', handleGlobalMouseUp)
+
+    return () => {
+      document.removeEventListener('mousemove', handleGlobalMouseMove)
+      document.removeEventListener('mouseup', handleGlobalMouseUp)
+    }
+  }, [])
 
   useEffect(() => {
     if (scrollRef.current && viewportOffset !== undefined) {
@@ -478,10 +487,9 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
   }, [viewportOffset])
 
   const handleScroll = useCallback(() => {
-    if (onViewportChange && scrollRef.current) {
-      onViewportChange(scrollRef.current.scrollLeft)
-    }
-  }, [onViewportChange])
+    // Only sync scroll position on drag end, not every frame
+    // This prevents full React re-renders during scrolling
+  }, [])
 
   const handleStageMouseEnter = (e: React.MouseEvent, slot: number, endpoint: SlotDetail, endpointName: string, stageId: string) => {
     if (tooltipTimeoutRef.current) {
@@ -556,6 +564,8 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
     handleAccountMouseLeave()
   }
 
+  const MAX_GROUPS_PER_SLOT = 30
+
   const renderAccountUpdates = (
     endpoint: SlotDetail,
     baseTime: number,
@@ -568,112 +578,170 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
 
     const sortedAccounts = [...endpoint.account_updates]
       .sort((a, b) => a.timestamp - b.timestamp)
-    
-    const GROUPING_THRESHOLD = 5
+
+    // Adaptive grouping: more aggressive at lower zoom to reduce DOM nodes
+    const GROUPING_THRESHOLD = Math.max(5, 15 / Math.max(scale, 0.01))
     const groupedUpdates: { accounts: typeof sortedAccounts, x: number, hasDelays: boolean }[] = []
-    
+
     sortedAccounts.forEach(account => {
       const x = (account.timestamp - baseTime) * scale
-      
-      const existingGroup = groupedUpdates.find(group => 
-        Math.abs(group.x - x) < GROUPING_THRESHOLD * scale
+
+      const existingGroup = groupedUpdates.find(group =>
+        Math.abs(group.x - x) < GROUPING_THRESHOLD
       )
-      
+
       if (existingGroup) {
         existingGroup.accounts.push(account)
         if (account.delay_ms != null && Number(account.delay_ms) > 0) {
           existingGroup.hasDelays = true
         }
       } else {
-        groupedUpdates.push({
-          accounts: [account],
-          x: x,
-          hasDelays: account.delay_ms != null && Number(account.delay_ms) > 0
-        })
+        // Cap max groups to prevent DOM explosion
+        if (groupedUpdates.length < MAX_GROUPS_PER_SLOT) {
+          groupedUpdates.push({
+            accounts: [account],
+            x: x,
+            hasDelays: account.delay_ms != null && Number(account.delay_ms) > 0
+          })
+        } else {
+          // Merge into nearest group
+          let nearest = groupedUpdates[0]
+          let minDist = Math.abs(groupedUpdates[0].x - x)
+          for (let i = 1; i < groupedUpdates.length; i++) {
+            const dist = Math.abs(groupedUpdates[i].x - x)
+            if (dist < minDist) {
+              minDist = dist
+              nearest = groupedUpdates[i]
+            }
+          }
+          nearest.accounts.push(account)
+          if (account.delay_ms != null && Number(account.delay_ms) > 0) {
+            nearest.hasDelays = true
+          }
+        }
       }
     })
     
+    // Pre-compute group metadata to avoid work in JSX
+    const groupsMeta = groupedUpdates.map((group, idx) => {
+      const isMultiple = group.accounts.length > 1
+      const hasOnlyDelays = group.accounts.every(a => a.delay_ms != null && Number(a.delay_ms) > 0)
+      const hasOnlyOnTime = group.accounts.every(a => a.delay_ms == null || Number(a.delay_ms) === 0)
+      const count = group.accounts.length
+      const size = count > 9 ? 18 : isMultiple ? 14 : 8
+      const color = hasOnlyDelays ? '#ef4444' : hasOnlyOnTime ? '#10b981' : '#f97316'
+      return { ...group, idx, isMultiple, hasOnlyDelays, hasOnlyOnTime, count, size, color }
+    })
+
+    const highlightDot = (idx: number | null) => {
+      // Remove previous highlight
+      if (hoveredDotIdxRef.current !== null) {
+        const prevEl = dotElementsRef.current.get(`dot-${hoveredDotIdxRef.current}`)
+        if (prevEl) {
+          const prev = groupsMeta.find(g => g.idx === hoveredDotIdxRef.current)
+          if (prev) {
+            prevEl.style.transform = 'translateY(-50%)'
+            prevEl.style.width = `${prev.size}px`
+            prevEl.style.height = `${prev.size}px`
+            prevEl.style.boxShadow = prev.isMultiple ? `0 0 0 2px ${prev.color}80` : ''
+            prevEl.style.zIndex = prev.hasOnlyDelays ? '22' : prev.hasOnlyOnTime ? '20' : '21'
+          }
+        }
+      }
+      hoveredDotIdxRef.current = idx
+      // Apply highlight
+      if (idx !== null) {
+        const el = dotElementsRef.current.get(`dot-${idx}`)
+        if (el) {
+          const g = groupsMeta.find(g => g.idx === idx)
+          if (g) {
+            const hoverSize = g.size * 1.5
+            el.style.transform = 'translateY(-50%)'
+            el.style.width = `${hoverSize}px`
+            el.style.height = `${hoverSize}px`
+            el.style.boxShadow = `0 0 8px ${g.color}, 0 0 0 2px ${g.color}`
+            el.style.zIndex = '50'
+          }
+        }
+      }
+    }
+
+    const handleContainerMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+      const rect = e.currentTarget.getBoundingClientRect()
+      const mouseX = e.clientX - rect.left + e.currentTarget.scrollLeft
+      // Find closest group
+      let closest = groupsMeta[0]
+      let closestDist = Math.abs(groupsMeta[0].x - mouseX)
+      for (let i = 1; i < groupsMeta.length; i++) {
+        const dist = Math.abs(groupsMeta[i].x - mouseX)
+        if (dist < closestDist) {
+          closestDist = dist
+          closest = groupsMeta[i]
+        }
+      }
+      if (closestDist < 15) {
+        highlightDot(closest.idx)
+        handleAccountMouseEnter(e, closest.accounts, baseTime)
+        hoveredAccountSignatureRef.current = closest.accounts[0]?.tx_signature ?? null
+      } else {
+        highlightDot(null)
+        handleAccountMouseLeave()
+        hoveredAccountSignatureRef.current = null
+      }
+    }
+
     return (
-      <>
-        <div
-          className="absolute"
-          style={{
-            top: `${yOffset + 110}px`, 
-            height: '20px',
-            left: 0,
-            right: 0,
-            pointerEvents: 'none'
-          }}
-        >
-          {groupedUpdates.map((group, groupIdx) => {
-            const isMultiple = group.accounts.length > 1
-            const hasOnlyDelays = group.accounts.every(a => a.delay_ms != null && Number(a.delay_ms) > 0)
-            const hasOnlyOnTime = group.accounts.every(a => a.delay_ms == null || Number(a.delay_ms) === 0)
-            const hasMixed = !hasOnlyDelays && !hasOnlyOnTime
-            
-            const isHighlighted = group.accounts.some(account => 
-              hoveredAccountSignature && account.tx_signature === hoveredAccountSignature
-            )
-            
-            return (
-              <div
-                key={`account-group-${groupIdx}`}
-                className="absolute"
-                style={{
-                  left: `${group.x}px`,
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  pointerEvents: 'auto',
-                  zIndex: hasOnlyDelays ? 22 : hasOnlyOnTime ? 20 : 21
-                }}
-                onMouseEnter={(e) => {
-                  e.stopPropagation()
-                  handleAccountMouseEnter(e, group.accounts, baseTime)
-                  // highlight corresponding accounts
-                  if (group.accounts.length > 0) {
-                    setHoveredAccountSignature(group.accounts[0].tx_signature)
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  e.stopPropagation()
-                  handleAccountMouseLeave()
-                  setHoveredAccountSignature(null)
-                }}
-              >
-                <div 
-                  className={cn(
-                    "rounded-full transition-all cursor-pointer hover:scale-125 relative",
-                    hasOnlyDelays ? "bg-red-500" : hasOnlyOnTime ? "bg-emerald-500" : "bg-orange-500",
-                    isMultiple && "ring-2",
-                    hasOnlyDelays && isMultiple && "ring-red-400",
-                    hasOnlyOnTime && isMultiple && "ring-emerald-400",
-                    hasMixed && isMultiple && "ring-orange-400",
-                    isHighlighted && "ring-4 ring-blue-400 scale-150"
-                  )}
-                  style={{
-                    width: isMultiple ? '12px' : '8px',
-                    height: isMultiple ? '12px' : '8px',
-                    opacity: hasOnlyOnTime ? 0.7 : 0.9,
-                    boxShadow: isHighlighted 
-                      ? '0 0 12px rgba(59, 130, 246, 0.8)' 
-                      : hasOnlyDelays ? '0 0 6px rgba(239, 68, 68, 0.4)' : 
-                        hasOnlyOnTime ? '0 0 4px rgba(16, 185, 129, 0.3)' : 
-                        '0 0 5px rgba(251, 146, 60, 0.4)',
-                    position: 'relative',
-                    zIndex: isHighlighted ? 50 : 10
-                  }}
-                >
-                  {isMultiple && (
-                    <span className="absolute inset-0 flex items-center justify-center text-[8px] text-white font-bold">
-                      {group.accounts.length}
-                    </span>
-                  )}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </>
+      <div
+        className="absolute"
+        style={{
+          top: `${yOffset + 110}px`,
+          height: '20px',
+          left: 0,
+          right: 0,
+        }}
+        onMouseMove={handleContainerMouseMove}
+        onMouseLeave={() => {
+          highlightDot(null)
+          handleAccountMouseLeave()
+          hoveredAccountSignatureRef.current = null
+        }}
+      >
+        {groupsMeta.map((group) => (
+          <div
+            key={group.idx}
+            ref={(el) => {
+              if (el) dotElementsRef.current.set(`dot-${group.idx}`, el)
+            }}
+            className="absolute rounded-full"
+            style={{
+              left: `${group.x}px`,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              width: `${group.size}px`,
+              height: `${group.size}px`,
+              backgroundColor: group.color,
+              opacity: group.hasOnlyOnTime ? 0.7 : 0.9,
+              zIndex: group.hasOnlyDelays ? 22 : group.hasOnlyOnTime ? 20 : 21,
+              boxShadow: group.isMultiple ? `0 0 0 2px ${group.color}80` : undefined,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            {group.isMultiple && (
+              <span style={{
+                fontSize: group.count > 9 ? '8px' : '7px',
+                color: 'white',
+                fontWeight: 700,
+                lineHeight: 1,
+                pointerEvents: 'none',
+              }}>
+                {group.count}
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
     )
   }
 
@@ -774,7 +842,7 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
         ref={scrollRef}
         className={cn(
           "timeline-scroll relative overflow-x-auto overflow-y-auto",
-          isDragging ? "cursor-grabbing" : "cursor-grab"
+          "cursor-grab"
         )}
         style={{ 
           height: '715px',
@@ -827,22 +895,18 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
             ))}
             
             {ep1Slots
-              .filter(({ slot }) => {
-                const slotX = ((slot.endpoint1.transitions[0]?.timestamp || firstTimestamp) - firstTimestamp) * pixelsPerMs
-                return slotX > -(viewportOffset || 0) - 200 && slotX < (viewportOffset || 0) + containerWidth + 200
-              })
               .map(({ slot, lane }) => {
                 const labelX = ep1LabelPositions.get(slot.slot) || -1
                 
                 return (
-                  <div 
+                  <div
                     key={`ep1-${slot.slot}`}
                     className="absolute"
                     style={{
                       top: `${TIMELINE_PADDING + SLOT_LABEL_HEIGHT + lane * (SLOT_HEIGHT + LANE_SPACING)}px`,
                       height: SLOT_HEIGHT,
                       left: 0,
-                      right: 0
+                      right: 0,
                     }}
                   >
                     {/* slot divider */}
@@ -914,22 +978,18 @@ export function Timeline({ data, zoom, viewportOffset = 0, onViewportChange, vis
             ))}
             
             {ep2Slots
-              .filter(({ slot }) => {
-                const slotX = ((slot.endpoint2.transitions[0]?.timestamp || firstTimestamp) - firstTimestamp) * pixelsPerMs
-                return slotX > -(viewportOffset || 0) - 200 && slotX < (viewportOffset || 0) + containerWidth + 200
-              })
               .map(({ slot, lane }) => {
                 const labelX = ep2LabelPositions.get(slot.slot) || -1
                 
                 return (
-                  <div 
+                  <div
                     key={`ep2-${slot.slot}`}
                     className="absolute"
                     style={{
                       top: `${TIMELINE_PADDING + SLOT_LABEL_HEIGHT + lane * (SLOT_HEIGHT + LANE_SPACING)}px`,
                       height: SLOT_HEIGHT,
                       left: 0,
-                      right: 0
+                      right: 0,
                     }}
                   >  
                     {/* slot divider */}

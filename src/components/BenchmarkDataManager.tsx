@@ -13,7 +13,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Upload, FileJson, Trash2, Database, AlertCircle, Clock, Activity, ChevronRight, Pencil, Check, X } from "lucide-react";
+import { Upload, FileJson, Trash2, Database, AlertCircle, Clock, Activity, ChevronRight, Pencil, Check, X, Loader2 } from "lucide-react";
 import type { BenchmarkResult } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -53,6 +53,8 @@ export function BenchmarkDataManager({
   const [showClearAllDialog, setShowClearAllDialog] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
+  const [loadingStep, setLoadingStep] = useState<string | null>(null);
+  const [loadingFileName, setLoadingFileName] = useState<string | null>(null);
 
   // Update selectedId when initialSelectedId changes
   useEffect(() => {
@@ -127,6 +129,9 @@ export function BenchmarkDataManager({
     );
   };
 
+  // Helper to yield to the browser between heavy steps
+  const yieldToBrowser = () => new Promise<void>(resolve => setTimeout(resolve, 0));
+
   // Process uploaded file
   const processFile = useCallback(
     (file: File) => {
@@ -137,17 +142,46 @@ export function BenchmarkDataManager({
         return;
       }
 
+      const fileSizeMB = (file.size / 1024 / 1024).toFixed(1);
+      setLoadingFileName(file.name);
+      setLoadingStep(`Reading file (${fileSizeMB} MB)...`);
+
       const reader = new FileReader();
 
-      reader.onload = (e) => {
+      reader.onload = async (e) => {
         try {
           const content = e.target?.result as string;
+
+          setLoadingStep("Parsing JSON...");
+          await yieldToBrowser();
+
           const data = JSON.parse(content);
+
+          setLoadingStep("Validating data structure...");
+          await yieldToBrowser();
 
           if (!validateBenchmarkData(data)) {
             setError("Invalid benchmark data format");
+            setLoadingStep(null);
+            setLoadingFileName(null);
             return;
           }
+
+          const slots = data.slots?.length || 0;
+          const acctUpdates = data.metadata?.total_account_updates
+            ? data.metadata.total_account_updates[0] + data.metadata.total_account_updates[1]
+            : 0;
+          const txUpdates = data.metadata?.total_transaction_updates
+            ? data.metadata.total_transaction_updates[0] + data.metadata.total_transaction_updates[1]
+            : 0;
+
+          setLoadingStep(
+            `Loaded ${slots} slots` +
+            (acctUpdates > 0 ? `, ${acctUpdates.toLocaleString()} account updates` : '') +
+            (txUpdates > 0 ? `, ${txUpdates.toLocaleString()} transaction updates` : '') +
+            ". Saving..."
+          );
+          await yieldToBrowser();
 
           // Create stored benchmark entry
           const id = Date.now().toString();
@@ -170,11 +204,23 @@ export function BenchmarkDataManager({
           onDataChange(data, id);
         } catch {
           setError("Failed to parse JSON file");
+        } finally {
+          setLoadingStep(null);
+          setLoadingFileName(null);
+        }
+      };
+
+      reader.onprogress = (e) => {
+        if (e.lengthComputable) {
+          const pct = Math.round((e.loaded / e.total) * 100);
+          setLoadingStep(`Reading file (${fileSizeMB} MB)... ${pct}%`);
         }
       };
 
       reader.onerror = () => {
         setError("Failed to read file");
+        setLoadingStep(null);
+        setLoadingFileName(null);
       };
 
       reader.readAsText(file);
@@ -305,15 +351,17 @@ export function BenchmarkDataManager({
           <div
             className={cn(
               "relative border-2 border-dashed rounded-lg transition-all duration-200",
-              isDragging 
-                ? "border-primary bg-primary/5 scale-[1.02]" 
-                : "border-border hover:border-primary/50",
-              "cursor-pointer group"
+              loadingStep
+                ? "border-primary/30 bg-muted/30 cursor-wait opacity-60"
+                : isDragging
+                  ? "border-primary bg-primary/5 scale-[1.02]"
+                  : "border-border hover:border-primary/50",
+              !loadingStep && "cursor-pointer group"
             )}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            onClick={() => fileInputRef.current?.click()}
+            onDragOver={loadingStep ? undefined : handleDragOver}
+            onDragLeave={loadingStep ? undefined : handleDragLeave}
+            onDrop={loadingStep ? undefined : handleDrop}
+            onClick={() => !loadingStep && fileInputRef.current?.click()}
           >
             <input
               ref={fileInputRef}
@@ -352,6 +400,19 @@ export function BenchmarkDataManager({
               </p>
             </div>
           </div>
+
+          {/* Loading Indicator */}
+          {loadingStep && (
+            <div className="flex items-center gap-3 p-4 text-sm bg-primary/5 border border-primary/20 rounded-lg">
+              <Loader2 className="h-5 w-5 text-primary animate-spin flex-shrink-0" />
+              <div className="min-w-0">
+                {loadingFileName && (
+                  <p className="font-medium truncate">{loadingFileName}</p>
+                )}
+                <p className="text-muted-foreground">{loadingStep}</p>
+              </div>
+            </div>
+          )}
 
           {/* Error Message */}
           {error && (

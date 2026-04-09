@@ -44,7 +44,7 @@ export function BenchmarkHeader({
 }: BenchmarkHeaderProps) {
   const [editingEndpoint, setEditingEndpoint] = useState<0 | 1 | null>(null)
   const [editingName, setEditingName] = useState("")
-  const { metadata, endpoints, version, with_load, grpc_config} = data
+  const { metadata, endpoints, version, with_load, with_transactions, grpc_config} = data
   const [isConfigOpen, setIsConfigOpen] = useState(false)
   const [isDataManagerOpen, setIsDataManagerOpen] = useState(false)
   
@@ -94,12 +94,24 @@ export function BenchmarkHeader({
             <span className="hidden sm:inline">Thorofare CLI Version: v{version}</span>
             <span className="sm:hidden">v{version}</span>
           </div>
-          {with_load && (
-            <Badge variant="secondary" className="text-sm">
-              <Activity className="h-3 w-3 mr-1" />
-              Load Testing Mode
-            </Badge>
-          )}
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            {with_load && (
+              <Badge variant="secondary" className="text-sm">
+                <Activity className="h-3 w-3 mr-1" />
+                Load Testing
+              </Badge>
+            )}
+            {data.with_accounts && (
+              <Badge variant="secondary" className="text-sm">
+                Accounts
+              </Badge>
+            )}
+            {with_transactions && (
+              <Badge variant="secondary" className="text-sm">
+                Transactions
+              </Badge>
+            )}
+          </div>
         </div>
       </div>
       
@@ -314,6 +326,18 @@ export function BenchmarkHeader({
                   <p className="text-sm text-muted-foreground">Unique Slots</p>
                   <p className="font-semibold text-lg">{endpoint.unique_slots}</p>
                 </div>
+                {endpoint.account_updates != null && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">Account Updates</p>
+                    <p className="font-semibold text-lg">{endpoint.account_updates.toLocaleString()}</p>
+                  </div>
+                )}
+                {endpoint.transaction_updates != null && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">Tx Updates</p>
+                    <p className="font-semibold text-lg">{endpoint.transaction_updates.toLocaleString()}</p>
+                  </div>
+                )}
               </div>
             </Card>
           );
