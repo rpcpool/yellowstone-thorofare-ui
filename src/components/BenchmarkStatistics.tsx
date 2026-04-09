@@ -1,7 +1,7 @@
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import type { BenchmarkResult } from "@/lib/types"
-import { AlertCircle, Info, Network, Cpu, Users, TrendingUp, Minus } from "lucide-react"
+import { AlertCircle, Info, Network, Cpu, Users, TrendingUp, Minus, ArrowRightLeft } from "lucide-react"
 import { parseEndpointName } from "@/lib/endpoint-utils"
 import {
   TooltipProvider,
@@ -153,14 +153,26 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
   if (data.endpoint1_summary.account_delay && data.endpoint2_summary.account_delay) {
     categories[0].metrics.push({
       key: "account_delay",
-      name: "Account Update Delays",
-      description: "Time difference for account update notifications",
+      name: "Account Update Delay",
+      description: "Time difference for account update notifications between endpoints",
       ep1Data: data.endpoint1_summary.account_delay,
       ep2Data: data.endpoint2_summary.account_delay,
     })
   }
 
+  // Add transaction delays if available
+  if (data.endpoint1_summary.transaction_delay && data.endpoint2_summary.transaction_delay) {
+    categories[0].metrics.push({
+      key: "transaction_delay",
+      name: "Transaction Update Delay",
+      description: "Time difference for transaction confirmation notifications between endpoints",
+      ep1Data: data.endpoint1_summary.transaction_delay,
+      ep2Data: data.endpoint2_summary.transaction_delay,
+    })
+  }
 
+  const hasAccountStats = data.with_accounts && data.endpoint1_summary.account_matched > 0
+  const hasTransactionStats = data.with_transactions && data.endpoint1_summary.transaction_matched > 0
 
   return (
     <TooltipProvider>
@@ -316,6 +328,99 @@ export function BenchmarkStatistics({ data, endpointNames }: BenchmarkStatistics
             </Card>
           )
         })}
+
+        {/* Account & Transaction Win/Loss Stats */}
+        {(hasAccountStats || hasTransactionStats) && (
+          <Card className="p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <ArrowRightLeft className="h-6 w-6 text-muted-foreground" />
+              <div>
+                <h3 className="text-xl font-semibold">Update Matching Summary</h3>
+                <p className="text-base text-muted-foreground">Which endpoint delivered matched updates first</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {hasAccountStats && (
+                <div className="space-y-3">
+                  <h4 className="text-base font-semibold">Account Updates</h4>
+                  <div className="text-sm text-muted-foreground mb-2">
+                    {data.endpoint1_summary.account_matched} matched updates across endpoints
+                  </div>
+                  <div className="flex gap-4">
+                    <div className="flex-1 p-3 rounded-lg bg-muted/50 text-center">
+                      <div className="text-2xl font-bold" style={{ color: EP1_COLOR }}>
+                        {data.endpoint1_summary.account_faster}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">{getEndpointShortName(0)} faster</div>
+                    </div>
+                    <div className="flex-1 p-3 rounded-lg bg-muted/50 text-center">
+                      <div className="text-2xl font-bold" style={{ color: EP2_COLOR }}>
+                        {data.endpoint1_summary.account_slower}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">{getEndpointShortName(1)} faster</div>
+                    </div>
+                  </div>
+                  <div className="w-full h-2 rounded-full bg-muted overflow-hidden flex">
+                    <div
+                      className="h-full rounded-l-full transition-all"
+                      style={{
+                        width: `${(data.endpoint1_summary.account_faster / data.endpoint1_summary.account_matched) * 100}%`,
+                        backgroundColor: EP1_COLOR,
+                      }}
+                    />
+                    <div
+                      className="h-full rounded-r-full transition-all"
+                      style={{
+                        width: `${(data.endpoint1_summary.account_slower / data.endpoint1_summary.account_matched) * 100}%`,
+                        backgroundColor: EP2_COLOR,
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {hasTransactionStats && (
+                <div className="space-y-3">
+                  <h4 className="text-base font-semibold">Transaction Updates</h4>
+                  <div className="text-sm text-muted-foreground mb-2">
+                    {data.endpoint1_summary.transaction_matched} matched updates across endpoints
+                  </div>
+                  <div className="flex gap-4">
+                    <div className="flex-1 p-3 rounded-lg bg-muted/50 text-center">
+                      <div className="text-2xl font-bold" style={{ color: EP1_COLOR }}>
+                        {data.endpoint1_summary.transaction_faster}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">{getEndpointShortName(0)} faster</div>
+                    </div>
+                    <div className="flex-1 p-3 rounded-lg bg-muted/50 text-center">
+                      <div className="text-2xl font-bold" style={{ color: EP2_COLOR }}>
+                        {data.endpoint1_summary.transaction_slower}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">{getEndpointShortName(1)} faster</div>
+                    </div>
+                  </div>
+                  <div className="w-full h-2 rounded-full bg-muted overflow-hidden flex">
+                    <div
+                      className="h-full rounded-l-full transition-all"
+                      style={{
+                        width: `${(data.endpoint1_summary.transaction_faster / data.endpoint1_summary.transaction_matched) * 100}%`,
+                        backgroundColor: EP1_COLOR,
+                      }}
+                    />
+                    <div
+                      className="h-full rounded-r-full transition-all"
+                      style={{
+                        width: `${(data.endpoint1_summary.transaction_slower / data.endpoint1_summary.transaction_matched) * 100}%`,
+                        backgroundColor: EP2_COLOR,
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </Card>
+        )}
 
         {/* Info Section */}
         <Card className="p-6 bg-muted/50">
